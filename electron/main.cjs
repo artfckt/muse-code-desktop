@@ -25,11 +25,52 @@ function safePayload(value) {
   }
 }
 
+function powerShellLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
+function findMuseBinary() {
+  if (process.platform !== "win32") return "muse";
+
+  const dirs = [];
+  if (process.env.MUSE_INSTALL_DIR?.trim()) {
+    dirs.push(process.env.MUSE_INSTALL_DIR.trim());
+  }
+  if (process.env.LOCALAPPDATA?.trim()) {
+    dirs.push(path.join(process.env.LOCALAPPDATA.trim(), "Programs", "muse"));
+  }
+
+  const pathDirs = String(process.env.Path || process.env.PATH || "")
+    .split(";")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  dirs.push(...pathDirs);
+
+  for (const dir of dirs) {
+    try {
+      const versionPath = path.join(dir, ".muse-version");
+      if (fs.existsSync(versionPath)) {
+        const version = fs.readFileSync(versionPath, "utf8").trim();
+        const binary = path.join(dir, `muse-bin-${version}.exe`);
+        if (fs.existsSync(binary)) return binary;
+      }
+
+      const exe = path.join(dir, "muse.exe");
+      if (fs.existsSync(exe)) return exe;
+    } catch {
+      // Keep probing other install locations.
+    }
+  }
+
+  return "muse";
+}
+
 async function runMuse(args, options = {}) {
-  const result = await execFileAsync("muse", args, {
+  const command = findMuseBinary();
+  const result = await execFileAsync(command, args, {
     cwd: options.cwd || process.cwd(),
     env: process.env,
-    shell: process.platform === "win32",
+    shell: process.platform === "win32" && command === "muse",
     windowsHide: true,
     timeout: options.timeout || 15000,
     maxBuffer: 1024 * 1024,
@@ -90,7 +131,7 @@ async function connectMuse(cwd) {
 
   const sdk = await import("@muse-code/sdk");
   const handshake = sdk.spawnMspConnection({
-    command: "muse",
+    command: findMuseBinary(),
     args: ["serve"],
     cwd,
     env: process.env,
@@ -211,22 +252,69 @@ app.whenReady().then(() => {
   ipcMain.handle("muse:diagnose", diagnoseMuse);
 
   ipcMain.handle("muse:login", async () => {
-    if (process.platform === "win32") {
-      const child = spawn("powershell.exe", ["-NoExit", "-Command", "muse login"], {
-        detached: true,
-        stdio: "ignore",
-        windowsHide: false,
-      });
-      child.unref();
-      return { started: true, mode: "terminal" };
+    const diagnostic = await diagnoseMuse();
+    if (!diagnostic.cliInstalled) {
+      throw new Error(
+        "Muse Code is installed but this app cannot find it yet. Close Muse Desktop completely, open a new PowerShell and confirm 'muse --version', then reopen the app."
+      );
     }
 
-    const child = spawn("muse", ["login"], {
+    const museBinary = findMuseBinary();
+    const cwd = activeWorkspace || app.getPath("home");
+
+    if (process.platform === "win32") {
+      const script = [
+        "$Host.UI.RawUI.WindowTitle = 'Muse Code Sign In'",
+        `Set-Location -LiteralPath ${powerShellLiteral(cwd)}`,
+        "if (-not $env:TBH_CREDENTIAL_BACKEND) { $env:TBH_CREDENTIAL_BACKEND = 'file' }",
+        "Write-Host ''",
+        "Write-Host 'Muse Code sign-in' -ForegroundColor Cyan",
+        "Write-Host 'Complete the browser sign-in. If Muse opens directly, type /login.' -ForegroundColor DarkGray",
+        "Write-Host ''",
+        `& ${powerShellLiteral(museBinary)} login`,
+        "if ($LASTEXITCODE -ne 0) {",
+        "  Write-Host ''",
+        "  Write-Host 'Direct login command was not accepted by this Muse version. Opening Muse interactive mode instead...' -ForegroundColor Yellow",
+        `  & ${powerShellLiteral(museBinary)}`,
+        "}",
+      ].join("; ");
+
+      await new Promise((resolve, reject) => {
+        const child = spawn(
+          "cmd.exe",
+          ["/d", "/c", "start", "", "powershell.exe", "-NoLogo", "-NoExit", "-ExecutionPolicy", "Bypass", "-Command", script],
+          {
+            cwd,
+            env: process.env,
+            windowsHide: true,
+            stdio: "ignore",
+          }
+        );
+
+        child.once("error", reject);
+        child.once("exit", (code) => {
+          if (code === 0) resolve();
+          else reject(new Error(`Could not open Muse sign-in terminal (launcher exit code ${code}).`));
+        });
+      });
+
+      return {
+        started: true,
+        mode: "visible-terminal",
+        museBinary,
+        cwd,
+        message: "Muse sign-in terminal opened. Complete browser authentication there.",
+      };
+    }
+
+    const child = spawn(museBinary, ["login"], {
+      cwd,
       detached: true,
       stdio: "ignore",
     });
+    child.on("error", () => undefined);
     child.unref();
-    return { started: true, mode: "process" };
+    return { started: true, mode: "process", museBinary, cwd };
   });
 
   ipcMain.handle("muse:choose-workspace", async () => {
