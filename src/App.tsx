@@ -323,11 +323,21 @@ export default function App() {
 
   async function openLogin() {
     setError("");
+    setBusy(true);
+    setStatus("Opening Muse sign-in…");
     try {
-      await window.muse.login();
-      setStatus("Muse login opened in PowerShell");
+      const result = await window.muse.login();
+      setStatus(result?.message || "Muse sign-in terminal opened");
+
+      // Refresh quickly so the UI can reflect credentials after the browser flow completes.
+      window.setTimeout(() => void refreshDiagnostic(), 2500);
+      window.setTimeout(() => void refreshDiagnostic(), 7000);
     } catch (err: any) {
-      setError(String(err?.message || err));
+      const message = String(err?.message || err);
+      setError(message);
+      setStatus("Could not open Muse sign-in");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -562,8 +572,18 @@ export default function App() {
           <div className="account-line">
             <div className={`status-dot ${diagnostic?.cliInstalled ? "ok" : "bad"}`} />
             <div>
-              <strong>{diagnostic?.cliInstalled ? "Muse CLI detected" : "Muse CLI missing"}</strong>
-              <span>{diagnostic?.version || "Install Muse Code first"}</span>
+              <strong>
+                {diagnostic?.authConfigPresent
+                  ? "Muse account detected"
+                  : diagnostic?.cliInstalled
+                    ? "Muse CLI detected"
+                    : "Muse CLI missing"}
+              </strong>
+              <span>
+                {diagnostic?.authConfigPresent
+                  ? "Browser sign-in credentials found"
+                  : diagnostic?.version || "Install Muse Code first"}
+              </span>
             </div>
           </div>
           <div className="subscription-row">
@@ -571,9 +591,9 @@ export default function App() {
             <span>{usage.tier}</span>
             <em>No API key</em>
           </div>
-          <button className="ghost-btn login-btn" onClick={openLogin}>
-            <LogIn size={15} />
-            Login with Muse Code
+          <button className="ghost-btn login-btn" onClick={openLogin} disabled={busy}>
+            {busy ? <Loader2 className="spin" size={15} /> : <LogIn size={15} />}
+            {diagnostic?.authConfigPresent ? "Reopen Muse sign-in" : "Sign in with Muse Code"}
           </button>
         </div>
       </aside>
@@ -622,8 +642,9 @@ export default function App() {
                 <button className="primary-btn large" onClick={chooseWorkspace}>
                   <FolderOpen size={18} /> Open a project
                 </button>
-                <button className="ghost-btn large" onClick={openLogin}>
-                  <LogIn size={18} /> Muse login
+                <button className="ghost-btn large" onClick={openLogin} disabled={busy}>
+                  {busy ? <Loader2 className="spin" size={18} /> : <LogIn size={18} />}
+                  Sign in with Muse
                 </button>
               </div>
               <div className="feature-grid">
