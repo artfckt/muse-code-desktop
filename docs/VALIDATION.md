@@ -8,6 +8,12 @@ Browser tests use a test-only preload substitute. They cover the existing-login 
 
 Authentication and billing policy tests ensure the host preserves the CLI credential backend and removes only an ambient `META_API_KEY`; stored API-key authentication is rejected before a turn is submitted. No credential files are read or copied into the renderer.
 
+The Linux Electron 38.8.6 directory package was launched under a virtual display. Its production renderer, sandboxed preload, account diagnostics against Muse Code 1.4.1 and packaged native PTY binding passed. The installed Muse CLI also rendered its real trust prompt inside the embedded terminal; keyboard input and switching back to the conversation passed through the production IPC bridge. This confirms the real desktop bridge and packaging, beyond browser fixtures.
+
+## Windows build status
+
+The Windows workflow for commit `48457b6` was attempted twice on 2026-09-29. Both attempts failed before a runner was assigned (`runner_id: 0`, no steps and no job logs). No Windows installer was produced or validated by those runs. The GitHub connector could not retrieve the check annotation, so the account-level cause is unconfirmed. The workflow is ready to build and validate the installer when a runner can start; inspect the run annotation in GitHub Actions to resolve that prerequisite.
+
 ## Remaining live verification
 
 - Complete Meta sign-in on the user's Windows installation.
