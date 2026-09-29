@@ -9,6 +9,10 @@ on:
       - "electron/**"
       - "src/**"
       - "package.json"
+      - "package-lock.json"
+      - "assets/**"
+      - "tests/**"
+      - "playwright.config.ts"
       - "tsconfig.json"
       - "vite.config.ts"
       - "index.html"
@@ -26,15 +30,30 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
+          cache: npm
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Protocol and authentication tests
+        run: npm test
+
+      - name: Install test browser
+        run: npx playwright install chromium
+
+      - name: Desktop UI tests
+        run: npm run test:ui
+
       - name: Build Windows installer
         run: npm run build:win
+
+      - name: Verify packaged native application
+        run: node tests/electron-smoke.cjs
+        env:
+          MUSE_PACKAGED_EXE: release/win-unpacked/Muse Desktop.exe
 
       - name: Upload installer
         uses: actions/upload-artifact@v4

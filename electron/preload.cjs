@@ -1,43 +1,51 @@
 const { contextBridge, ipcRenderer } = require("electron");
-
+const invoke =
+  (channel) =>
+  (...args) =>
+    ipcRenderer.invoke(`muse:${channel}`, ...args);
+const subscribe = (channel) => (listener) => {
+  const handler = (_event, payload) => listener(payload);
+  ipcRenderer.on(`muse:${channel}`, handler);
+  return () => ipcRenderer.removeListener(`muse:${channel}`, handler);
+};
 contextBridge.exposeInMainWorld("muse", {
-  diagnose: () => ipcRenderer.invoke("muse:diagnose"),
-  login: () => ipcRenderer.invoke("muse:login"),
-  chooseWorkspace: () => ipcRenderer.invoke("muse:choose-workspace"),
-  connectWorkspace: (cwd) => ipcRenderer.invoke("muse:connect-workspace", cwd),
-  listSessions: () => ipcRenderer.invoke("muse:list-sessions"),
-  startSession: (options) => ipcRenderer.invoke("muse:start-session", options),
-  resumeSession: (sessionId) => ipcRenderer.invoke("muse:resume-session", sessionId),
-  readSession: (sessionId) => ipcRenderer.invoke("muse:read-session", sessionId),
-  viewPage: (sessionId) => ipcRenderer.invoke("muse:view-page", sessionId),
-  sendTurn: (payload) => ipcRenderer.invoke("muse:send-turn", payload),
-  interrupt: (sessionId, turnId) => ipcRenderer.invoke("muse:interrupt", sessionId, turnId),
-  listModels: (sessionId) => ipcRenderer.invoke("muse:list-models", sessionId),
-  usage: () => ipcRenderer.invoke("muse:usage"),
-  pending: (sessionId) => ipcRenderer.invoke("muse:pending", sessionId),
-  decideApproval: (decision) => ipcRenderer.invoke("muse:decide-approval", decision),
-  setModel: (sessionId, model) => ipcRenderer.invoke("muse:set-model", sessionId, model),
-  setApprovalMode: (sessionId, mode) => ipcRenderer.invoke("muse:set-approval-mode", sessionId, mode),
-  userShell: (sessionId, commandText) => ipcRenderer.invoke("muse:user-shell", sessionId, commandText),
-
-  onEvent: (listener) => {
-    const handler = (_event, payload) => listener(payload);
-    ipcRenderer.on("muse:event", handler);
-    return () => ipcRenderer.removeListener("muse:event", handler);
-  },
-  onStderr: (listener) => {
-    const handler = (_event, payload) => listener(payload);
-    ipcRenderer.on("muse:stderr", handler);
-    return () => ipcRenderer.removeListener("muse:stderr", handler);
-  },
-  onHostExit: (listener) => {
-    const handler = (_event, payload) => listener(payload);
-    ipcRenderer.on("muse:host-exit", handler);
-    return () => ipcRenderer.removeListener("muse:host-exit", handler);
-  },
-  onProtocolError: (listener) => {
-    const handler = (_event, payload) => listener(payload);
-    ipcRenderer.on("muse:protocol-error", handler);
-    return () => ipcRenderer.removeListener("muse:protocol-error", handler);
-  },
+  bootstrap: invoke("bootstrap"),
+  diagnose: invoke("diagnose"),
+  login: invoke("login"),
+  cancelLogin: invoke("cancel-login"),
+  openExternal: invoke("open-external"),
+  openCli: invoke("open-cli"),
+  chooseBinary: invoke("choose-binary"),
+  chooseWorkspace: invoke("choose-workspace"),
+  connectWorkspace: invoke("connect-workspace"),
+  listSessions: invoke("list-sessions"),
+  startSession: invoke("start-session"),
+  resumeSession: invoke("resume-session"),
+  readSession: invoke("read-session"),
+  viewPage: invoke("view-page"),
+  sendTurn: invoke("send-turn"),
+  interrupt: invoke("interrupt"),
+  listModels: invoke("list-models"),
+  listSkills: invoke("list-skills"),
+  usage: invoke("usage"),
+  pending: invoke("pending"),
+  decideApproval: invoke("decide-approval"),
+  answerInput: invoke("answer-input"),
+  cancelInput: invoke("cancel-input"),
+  setModel: invoke("set-model"),
+  setApprovalMode: invoke("set-approval-mode"),
+  userShell: invoke("user-shell"),
+  compact: invoke("compact"),
+  rename: invoke("rename"),
+  readOutput: invoke("read-output"),
+  onEvent: subscribe("event"),
+  terminalStart: invoke("terminal-start"),
+  terminalWrite: invoke("terminal-write"),
+  terminalResize: invoke("terminal-resize"),
+  terminalRestart: invoke("terminal-restart"),
+  onTerminalData: subscribe("terminal-data"),
+  onTerminalExit: subscribe("terminal-exit"),
+  onStderr: subscribe("stderr"),
+  onHostExit: subscribe("host-exit"),
+  onProtocolError: subscribe("protocol-error"),
 });
