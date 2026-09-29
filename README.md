@@ -18,13 +18,13 @@ This app starts the local `muse` CLI and talks to `muse serve` through the offic
 - Node.js 22+ for development/building
 - Muse Code CLI installed and available as `muse`
 - An active Muse Code subscription
-- Run `muse login` once before using the app
+- Sign in to Muse Code once before using the app
 
 Official Windows CLI install:
 
 ```powershell
 irm https://dev.meta.ai/install.ps1 | iex
-muse login
+muse
 ```
 
 ## Development
@@ -47,7 +47,7 @@ The installer is written to `release/`.
 
 - Native project-folder picker
 - Detect Muse CLI and login configuration
-- Open the Muse browser login flow from the app
+- Open a visible Muse sign-in terminal from the app; on first run choose browser sign-in, or use `/login` in Muse
 - Start/resume Muse sessions
 - Stream Muse MSP notifications into the UI
 - Send prompts without API keys
