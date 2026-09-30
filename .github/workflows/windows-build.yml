@@ -20,7 +20,8 @@ on:
 
 jobs:
   build-windows:
-    runs-on: windows-latest
+    # Use the Visual Studio 2022 toolchain supported by the native PTY rebuild.
+    runs-on: windows-2022
 
     steps:
       - name: Checkout
