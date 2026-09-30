@@ -178,7 +178,11 @@ class MuseHost {
   }
   async query(method, params = {}) {
     const host = await this.connect();
-    return bounded(host.connection.request(method, params), method);
+    return bounded(
+      host.connection.request(method, params),
+      method,
+      method === "session/list" ? 120000 : 30000,
+    );
   }
   async command(method, params = {}) {
     const host = await this.connect();

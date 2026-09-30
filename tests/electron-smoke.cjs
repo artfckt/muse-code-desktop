@@ -9,6 +9,10 @@ const os = require("node:os");
     ? fs.mkdtempSync(path.join(os.tmpdir(), "muse-electron-smoke-"))
     : null;
   const env = { ...process.env };
+  const desktopData = fs.mkdtempSync(
+    path.join(os.tmpdir(), "muse-desktop-smoke-data-"),
+  );
+  env.MUSE_DESKTOP_DATA_DIR = desktopData;
   if (isolatedHome) {
     const config = path.join(isolatedHome, ".config", "muse");
     fs.mkdirSync(config, { recursive: true });
@@ -46,6 +50,46 @@ const os = require("node:os");
       await window.evaluate(() => typeof globalThis.muse?.answerInput),
       "function",
     );
+    for (const method of [
+      "commands",
+      "mcpInventory",
+      "saveAttachment",
+      "sessionMedia",
+      "setPermissions",
+      "openAgent",
+      "openConversation",
+      "agentControl",
+      "notify",
+    ])
+      assert.equal(
+        await window.evaluate(
+          (method) => typeof globalThis.muse[method],
+          method,
+        ),
+        "function",
+      );
+    const media = await window.evaluate(() =>
+      globalThis.muse.saveAttachment({
+        name: "probe.png",
+        mediaType: "image/png",
+        base64Data:
+          "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6GZAAAAAASUVORK5CYII=",
+      }),
+    );
+    assert.equal(
+      await window.evaluate(
+        (url) =>
+          new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(img.naturalWidth);
+            img.onerror = () => resolve(0);
+            img.src = url;
+          }),
+        media.url,
+      ),
+      1,
+      "packaged local media protocol decodes persisted image",
+    );
     assert.ok(
       await window
         .getByRole("heading", { name: "Make room for your next idea." })
@@ -75,6 +119,30 @@ const os = require("node:os");
     await window.locator('.theme-choice:has(input[value="muse"])').click();
     await window.getByRole("button", { name: "Close dialog" }).click();
     if (process.env.MUSE_TEST_BINARY) {
+      await application.evaluate(({ app }) => {
+        const { createRequire } = process.getBuiltinModule("node:module");
+        const path = process.getBuiltinModule("node:path");
+        // The isolated echo provider has no account or paid requests.
+        createRequire(path.join(app.getAppPath(), "package.json"))(
+          "./electron/muse-host.cjs",
+        ).MuseHost.prototype.requireSubscription = async () => ({});
+      });
+      await window.evaluate(
+        (root) => globalThis.muse.connectWorkspace(root),
+        isolatedHome,
+      );
+      const session = await window.evaluate(() =>
+        globalThis.muse.startSession({ permissionProfile: "yolo" }),
+      );
+      const opened = application.waitForEvent("window");
+      await window.evaluate(
+        (sessionId) => globalThis.muse.openAgent({ sessionId }),
+        session.sessionId,
+      );
+      const agentWindow = await opened;
+      await agentWindow.waitForSelector(".agent-window", { timeout: 15000 });
+      assert.equal(await agentWindow.locator(".agent-window h2").count(), 1);
+      await agentWindow.close();
       await window
         .getByRole("button", { name: "Muse CLI Native", exact: true })
         .click();
@@ -146,6 +214,7 @@ const os = require("node:os");
   } finally {
     await application.close();
     if (isolatedHome) fs.rmSync(isolatedHome, { recursive: true, force: true });
+    fs.rmSync(desktopData, { recursive: true, force: true });
   }
 })().catch((error) => {
   console.error(error);

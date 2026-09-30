@@ -11,8 +11,8 @@ import {
   X,
   MessageCircleQuestion,
 } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { Markdown, MediaGallery } from "./RichContent";
+export { Markdown } from "./RichContent";
 import type { MuseItem } from "./protocol";
 import { itemText } from "./protocol";
 
@@ -40,34 +40,6 @@ export function MuseMark({ large = false }: { large?: boolean }) {
     </svg>
   );
 }
-export function Markdown({ text }: { text: string }) {
-  return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        a: ({ href, children }) => (
-          <a
-            href={href}
-            onClick={(event) => {
-              event.preventDefault();
-              if (href) void window.muse.openExternal(href);
-            }}
-          >
-            {children}
-            <ExternalLink size={11} />
-          </a>
-        ),
-        pre: ({ children }) => (
-          <div className="code-block">
-            <pre>{children}</pre>
-          </div>
-        ),
-      }}
-    >
-      {text}
-    </ReactMarkdown>
-  );
-}
 export function TranscriptItem({ item }: { item: MuseItem }) {
   const [copied, setCopied] = useState(false);
   const [fullOutput, setFullOutput] = useState("");
@@ -77,8 +49,14 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
   if (item.kind === "userMessage")
     return (
       <article className="user-message">
-        <div>{text}</div>
-        {item.attachments?.length ? (
+        <div>
+          {item.desktopMedia?.length
+            ? text.replace(/\[Image #\d+\]/g, "").trim()
+            : text}
+        </div>
+        {item.desktopMedia?.length ? (
+          <MediaGallery media={item.desktopMedia} workspace={item.workspace} />
+        ) : item.attachments?.length ? (
           <span className="attachment-note">
             {item.attachments.length} attached image
             {item.attachments.length > 1 ? "s" : ""}
@@ -109,7 +87,7 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
           </button>
         </div>
         <div className="markdown">
-          <Markdown text={text || "…"} />
+          <Markdown text={text || "…"} workspace={item.workspace} />
         </div>
         {item.truncated ? (
           <small>
@@ -147,10 +125,47 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
           </span>
         ) : null}
         <small>{item.status}</small>
+        {item.durationMs != null ? (
+          <small>{(item.durationMs / 1000).toFixed(1)}s</small>
+        ) : null}
         <ChevronDown size={13} />
       </summary>
       <div className="tool-detail">
-        {item.args ? <pre>{item.args}</pre> : null}
+        {item.childSessionId ? (
+          <button
+            className="text-button"
+            onClick={() =>
+              void window.muse
+                .openAgent({
+                  sessionId: item.childSessionId,
+                  parentSessionId: item.sessionId,
+                })
+                .catch((err) => setOutputError(err.message))
+            }
+          >
+            Open agent conversation <ExternalLink size={12} />
+          </button>
+        ) : null}
+        {item.modelVisibleContent?.filter(
+          (part: any) =>
+            part.path && /^(image|video|audio)\//.test(part.mediaType || ""),
+        ).length ? (
+          <MediaGallery
+            media={item.modelVisibleContent.filter(
+              (part: any) =>
+                part.path &&
+                /^(image|video|audio)\//.test(part.mediaType || ""),
+            )}
+            workspace={item.workspace}
+          />
+        ) : null}
+        {item.args ? (
+          <pre>
+            {typeof item.args === "string"
+              ? item.args
+              : JSON.stringify(item.args, null, 2)}
+          </pre>
+        ) : null}
         {text ? <pre>{text}</pre> : <span>No output yet.</span>}
         {item.children?.map((child: any) => (
           <div

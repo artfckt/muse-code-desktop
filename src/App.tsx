@@ -35,7 +35,23 @@ import {
   Terminal,
   X,
   Zap,
+  Users,
 } from "lucide-react";
+import { Select } from "./Select";
+import { DesktopSettings } from "./DesktopSettings";
+import {
+  readPreferences,
+  savePreferences,
+  applyPreferences,
+} from "./desktop-preferences";
+import { prepareAttachment, type Attachment } from "./media";
+import {
+  ResizeHandle,
+  ConversationTimeline,
+  SessionDetails,
+  AgentsPanel,
+  McpPanel,
+} from "./SessionPanels";
 import {
   ApprovalCard,
   MuseMark,
@@ -58,6 +74,7 @@ import {
   themes,
 } from "./themes";
 const NativeTerminal = lazy(() => import("./NativeTerminal"));
+import { AgentWindow } from "./AgentWindow";
 
 const efforts = [
   "default",
@@ -99,12 +116,6 @@ const suggestions = [
       "Inspect the UI and user flows of this project. Plan improvements to usability and visual consistency.",
   },
 ];
-type ImageAttachment = {
-  name: string;
-  mediaType: string;
-  base64Data: string;
-  preview: string;
-};
 function basename(value: string) {
   return value.split(/[\\/]/).filter(Boolean).pop() || "Workspace";
 }
@@ -123,6 +134,20 @@ function timeAgo(value: string) {
 }
 
 export default function App() {
+  const params = new URLSearchParams(location.search);
+  return params.get("agent") ? (
+    <AgentWindow
+      id={params.get("agent")!}
+      parent={params.get("parent") || ""}
+    />
+  ) : (
+    <DesktopApp />
+  );
+}
+function DesktopApp() {
+  const [preferences, setPreferences] = useState(readPreferences);
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
   const [themePreference, setThemePreference] = useState(readThemePreference);
   const [systemDark, setSystemDark] = useState(
     () => window.matchMedia("(prefers-color-scheme: dark)").matches,
@@ -137,14 +162,20 @@ export default function App() {
   }, []);
   useLayoutEffect(() => {
     applyTheme(theme);
+    applyPreferences(preferences);
+    savePreferences(preferences);
     saveThemePreference(themePreference);
     void window.muse
       .setWindowTheme?.({
-        background: theme.colors.bg,
-        foreground: theme.colors.text,
+        background: /^#[a-f0-9]{6}$/i.test(preferences.colors.bg || "")
+          ? preferences.colors.bg
+          : theme.colors.bg,
+        foreground: /^#[a-f0-9]{6}$/i.test(preferences.colors.text || "")
+          ? preferences.colors.text
+          : theme.colors.text,
       })
       .catch(() => {});
-  }, [theme, themePreference]);
+  }, [theme, themePreference, preferences]);
   const [diagnostic, setDiagnostic] = useState<any>(null);
   const [workspace, setWorkspace] = useState("");
   const [sessions, setSessions] = useState<any[]>([]);
@@ -152,8 +183,20 @@ export default function App() {
   const [items, setItems] = useState<MuseItem[]>([]);
   const [models, setModels] = useState<any[]>([]);
   const [modelId, setModelId] = useState("");
-  const [reasoning, setReasoning] = useState("default");
+  const [reasoning, setReasoning] = useState(preferences.defaultReasoning);
   const [approvalMode, setApprovalMode] = useState("");
+  const [permissionProfile, setPermissionProfile] = useState(
+    preferences.defaultPermissions,
+  );
+  const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [completed, setCompleted] = useState<Record<string, string>>({});
+  const [sessionStats, setSessionStats] = useState<Record<string, any>>({});
+  const [media, setMedia] = useState<Record<string, Record<string, any[]>>>({});
+  const [commands, setCommands] = useState<any[]>([]);
+  const [mcp, setMcp] = useState<any>(null);
+  const [slashIndex, setSlashIndex] = useState(0);
+  const [terminalCommand, setTerminalCommand] = useState("");
   const [usage, setUsage] = useState<any>(null);
   const [pending, setPending] = useState<{
     approvals: any[];
@@ -161,7 +204,7 @@ export default function App() {
   }>({ approvals: [], userInputs: [] });
   const [skills, setSkills] = useState<any[]>([]);
   const [prompt, setPrompt] = useState("");
-  const [images, setImages] = useState<ImageAttachment[]>([]);
+  const [images, setImages] = useState<Attachment[]>([]);
   const [turns, setTurns] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Connecting to Muse Code…");
@@ -172,9 +215,9 @@ export default function App() {
   const [login, setLogin] = useState<any>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [inspector, setInspector] = useState(true);
-  const [tab, setTab] = useState<"conversation" | "activity" | "terminal">(
-    "conversation",
-  );
+  const [tab, setTab] = useState<
+    "conversation" | "activity" | "terminal" | "agents"
+  >("conversation");
   const [terminalOpened, setTerminalOpened] = useState(false);
   function openTerminal() {
     setTerminalOpened(true);
@@ -188,6 +231,8 @@ export default function App() {
   const activeRef = useRef("");
   const workspaceRef = useRef("");
   const stores = useRef(new Map<string, Transcript>());
+  const sessionsRequest = useRef<Promise<void> | null>(null);
+  const sessionsRefreshAgain = useRef(false);
   const buffering = useRef<MuseEvent[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
@@ -195,6 +240,31 @@ export default function App() {
   const fileRef = useRef<HTMLInputElement>(null);
   const working = !!turns[session];
   const active = sessions.find((row) => row.sessionId === session);
+  const slashOptions = /^\/[^\s]*$/.test(prompt)
+    ? [
+        ...commands,
+        ...skills.map((skill) => ({
+          name: skill.selector,
+          description: skill.description || skill.displayName,
+          route: "skill",
+          source: skill.source,
+        })),
+      ]
+        .filter(
+          (command, index, list) =>
+            list.findIndex((c) => c.name === command.name) === index,
+        )
+        .filter((command) =>
+          command.name.toLowerCase().includes(prompt.slice(1).toLowerCase()),
+        )
+    : [];
+  const groupedWorkspaces = [
+    ...new Set([
+      ...workspaces,
+      workspace,
+      ...sessions.map((row) => row.workspaceRoot || ""),
+    ]),
+  ].filter((root) => root || sessions.some((row) => !row.workspaceRoot));
   const account = diagnostic?.account;
   const signedIn = account?.state === "accountLogin";
   const accountName = signedIn
@@ -206,8 +276,8 @@ export default function App() {
         : diagnostic
           ? "Muse CLI unavailable"
           : "Checking your account…";
-  const tasks = items.filter((item) =>
-    ["toolCall", "userShell", "subagent", "workflow"].includes(item.kind),
+  const tasks = items.filter(
+    (item) => !["userMessage", "agentMessage"].includes(item.kind),
   );
   const showItems = tab === "activity" ? tasks : items;
 
@@ -223,9 +293,34 @@ export default function App() {
       );
     return result;
   }, []);
-  const refreshSessions = useCallback(async () => {
-    if (workspaceRef.current)
-      setSessions((await window.muse.listSessions()).sessions || []);
+  const refreshSessions = useCallback(async (): Promise<void> => {
+    if (sessionsRequest.current) {
+      sessionsRefreshAgain.current = true;
+      return sessionsRequest.current;
+    }
+    const request = window.muse
+      .listSessions()
+      .then((raw) =>
+        setSessions((prev) => {
+          const rows = raw.sessions || [];
+          const selected = prev.find(
+            (row) => row.sessionId === activeRef.current,
+          );
+          return selected &&
+            !rows.some((row: any) => row.sessionId === selected.sessionId)
+            ? [selected, ...rows]
+            : rows;
+        }),
+      )
+      .finally(() => {
+        sessionsRequest.current = null;
+        if (sessionsRefreshAgain.current) {
+          sessionsRefreshAgain.current = false;
+          void refreshSessions().catch(() => {});
+        }
+      });
+    sessionsRequest.current = request;
+    return request;
   }, []);
   const refreshPending = useCallback(async () => {
     const id = activeRef.current;
@@ -266,29 +361,31 @@ export default function App() {
   async function hydrateWorkspace(cwd: string) {
     workspaceRef.current = cwd;
     setWorkspace(cwd);
+    setWorkspaces((prev) => [...new Set([...prev, cwd])]);
     selectSession("");
     setItems([]);
     setPending({ approvals: [], userInputs: [] });
     setSkills([]);
     setPrompt("");
     setImages([]);
+    setPermissionProfile(preferencesRef.current.defaultPermissions);
+    setApprovalMode("");
+    setReasoning(preferencesRef.current.defaultReasoning);
+    void refreshSessions().catch((err) => setError(err.message));
     const results = await Promise.allSettled([
-      window.muse.listSessions(),
       window.muse.listModels(),
       window.muse.usage(),
       refreshAccount(),
     ]);
-    if (results[0].status === "fulfilled")
-      setSessions(results[0].value.sessions || []);
-    if (results[1].status === "fulfilled") {
-      const list = results[1].value.models || [];
+    if (results[0].status === "fulfilled") {
+      const list = results[0].value.models || [];
       setModels(list);
       setModelId(
         (list.find((row: any) => row.isDefault) || list[0])?.modelId || "",
       );
     }
-    if (results[2].status === "fulfilled")
-      setUsage(subscriptionUsage(results[2].value));
+    if (results[1].status === "fulfilled")
+      setUsage(subscriptionUsage(results[1].value));
     setStatus("Project connected");
   }
   async function chooseWorkspace() {
@@ -297,26 +394,47 @@ export default function App() {
       if (result) await hydrateWorkspace(result.workspace);
     });
   }
-  async function createSession() {
+  async function createSession(options: { fresh?: boolean } = {}) {
+    const profile = options.fresh
+      ? preferencesRef.current.defaultPermissions
+      : permissionProfile;
     const result = await window.muse.startSession({
       modelId: modelId || undefined,
-      approvalMode: approvalMode || undefined,
+      approvalMode: options.fresh ? undefined : approvalMode || undefined,
+      permissionProfile: profile,
     });
+    setPermissionProfile(profile);
+    if (options.fresh) {
+      setReasoning(preferencesRef.current.defaultReasoning);
+      setApprovalMode("");
+    }
     const id = result.sessionId;
+    if (result.raw?.session)
+      setSessions((prev) => [
+        { ...result.raw.session, permissionProfile: profile },
+        ...prev.filter((row) => row.sessionId !== id),
+      ]);
     selectSession(id);
     storeFor(id).seed([]);
     setItems([]);
     setPending({ approvals: [], userInputs: [] });
     setTab("conversation");
-    await Promise.allSettled([
-      refreshSessions(),
-      window.muse.listSkills(id).then((raw) => setSkills(raw.skills || [])),
-    ]);
+    void refreshSessions().catch((err) => setError(err.message));
+    await window.muse
+      .listSkills(id)
+      .then((raw) => setSkills(raw.skills || []))
+      .catch((err) => setError(err.message));
     return id;
   }
   async function loadSession(id: string) {
     await run(async () => {
       const previousId = activeRef.current;
+      const row = sessions.find((row) => row.sessionId === id);
+      if (row?.workspaceRoot && row.workspaceRoot !== workspaceRef.current) {
+        await window.muse.connectWorkspace(row.workspaceRoot);
+        workspaceRef.current = row.workspaceRoot;
+        setWorkspace(row.workspaceRoot);
+      }
       selectSession(id);
       buffering.current = [];
       setItems([]);
@@ -347,8 +465,30 @@ export default function App() {
         for (const event of buffering.current || []) store.apply(event);
         buffering.current = null;
         setItems(store.list());
+        const savedMedia = await window.muse.sessionMedia(id);
+        setMedia((prev) => ({ ...prev, [id]: savedMedia }));
+        setPermissionProfile(
+          result.permissionProfile || row?.permissionProfile || "standard",
+        );
+        if (result.session?.workspaceRoot) {
+          workspaceRef.current = result.session.workspaceRoot;
+          setWorkspace(result.session.workspaceRoot);
+        }
         setModelId(result.session?.modelId || "");
         const snapshot = result.history?.snapshot?.state;
+        if (snapshot)
+          setSessionStats((prev) => ({
+            ...prev,
+            [id]: {
+              ...prev[id],
+              contextUsage: snapshot.contextUsage,
+              tokenUsage: snapshot.tokenUsage
+                ? { cumulative: snapshot.tokenUsage }
+                : prev[id]?.tokenUsage,
+              goal: snapshot.goal,
+              todoList: snapshot.todoList,
+            },
+          }));
         setApprovalMode(
           result.session?.approvalMode?.mode ||
             snapshot?.approvalMode?.mode ||
@@ -402,6 +542,44 @@ export default function App() {
       setStatus("Stopping…");
     });
   }
+  async function changePermissions(profile: string, mode = approvalMode) {
+    await run(async () => {
+      const nextMode =
+        profile === "yolo"
+          ? "allowAll"
+          : mode === "allowAll"
+            ? "onRequest"
+            : mode;
+      if (session) await window.muse.setPermissions(session, profile, nextMode);
+      setPermissionProfile(profile);
+      setApprovalMode(nextMode);
+      if (session)
+        setSessions((prev) =>
+          prev.map((row) =>
+            row.sessionId === session
+              ? { ...row, permissionProfile: profile }
+              : row,
+          ),
+        );
+    });
+  }
+  async function switchWorkspace(root: string) {
+    if (!root) return;
+    await run(async () => {
+      const result = await window.muse.connectWorkspace(root);
+      await hydrateWorkspace(result.workspace);
+    });
+  }
+  function chooseCommand(command: any) {
+    setPrompt(`/${command.name} `);
+    setSlashIndex(0);
+    textareaRef.current?.focus();
+  }
+  function nativeCommand(value: string) {
+    setTerminalCommand(value);
+    openTerminal();
+    setStatus("Command prepared in Muse CLI. Review it and press Enter there.");
+  }
   async function sendPrompt() {
     if ((!prompt.trim() && !images.length) || busy || readOnly) return;
     await run(async () => {
@@ -416,7 +594,7 @@ export default function App() {
         const name = slash[1],
           args = slash[2] || "";
         if (["new", "clear"].includes(name)) {
-          await createSession();
+          await createSession({ fresh: true });
           setPrompt("");
           return;
         }
@@ -452,38 +630,100 @@ export default function App() {
           setPrompt("");
           return;
         }
+        if (
+          [
+            "settings",
+            "theme",
+            "permissions",
+            "notifications",
+            "effort",
+          ].includes(name)
+        ) {
+          setModal("settings");
+          setPrompt("");
+          return;
+        }
+        if (["subagents", "tasks", "workflows"].includes(name)) {
+          setTab(name === "subagents" ? "agents" : "activity");
+          setPrompt("");
+          return;
+        }
+        if (name === "mcp") {
+          nativeCommand(text);
+          setPrompt("");
+          return;
+        }
+        if (name === "name") {
+          setRename(args || (active ? sessionTitle(active) : ""));
+          setModal("rename");
+          setPrompt("");
+          return;
+        }
+        if (name === "copy") {
+          const answer = [...items]
+            .reverse()
+            .find((item) => item.kind === "agentMessage");
+          if (answer) await navigator.clipboard.writeText(answer.text || "");
+          setPrompt("");
+          return;
+        }
+        if (name === "fork") {
+          if (!session) throw new Error("Open a conversation to fork it.");
+          const fork = await window.muse.forkSession(session);
+          void refreshSessions().catch((err) => setError(err.message));
+          await loadSession(fork.session?.sessionId || fork.sessionId);
+          setPrompt("");
+          return;
+        }
+        const builtIn = commands.find((command) => command.name === name);
+        if (builtIn?.route === "native") {
+          nativeCommand(text);
+          setPrompt("");
+          return;
+        }
       }
       let id = activeRef.current;
       if (!id) id = await createSession();
-      if (slash) {
+      if (slash && slash[1] !== "agents") {
         const catalog = await window.muse.listSkills(id);
         setSkills(catalog.skills || []);
         if (
           !(catalog.skills || []).some(
             (skill: any) => skill.selector === slash[1],
           )
-        )
-          throw new Error(
-            `/${slash[1]} is not available in this conversation. Use the Muse CLI tab for native commands.`,
-          );
+        ) {
+          nativeCommand(text);
+          setPrompt("");
+          return;
+        }
       }
       if (text.startsWith("!")) {
         await window.muse.userShell(id, text.slice(1).trim());
         setStatus("Shell command submitted");
       } else {
-        const skill = slash
-          ? { selector: slash[1], arguments: slash[2] || "" }
-          : undefined;
+        const skill =
+          slash && slash[1] !== "agents"
+            ? { selector: slash[1], arguments: slash[2] || "" }
+            : undefined;
         const ack = await window.muse.sendTurn({
           sessionId: id,
-          text: skill ? "" : text,
+          text: skill
+            ? ""
+            : (slash?.[1] === "agents"
+                ? `Use native Muse subagents to delegate independent parts of this task. ${slash[2] || "Ask me which task I want the agents to work on."}`
+                : text) +
+              images
+                .filter((image) => image.mediaType.startsWith("video/"))
+                .map(
+                  (image) =>
+                    `\nVideo: ${image.name}. Four sampled frames are attached in chronological order. Full video file: ${image.path}`,
+                )
+                .join(""),
           skill,
-          images: images.map(({ mediaType, base64Data }) => ({
-            mediaType,
-            base64Data,
-          })),
+          images: images.flatMap((image) => image.frames),
+          attachmentIds: images.map((image) => image.id),
           reasoningEffort: reasoning === "default" ? undefined : reasoning,
-          ifBusy: "queue",
+          ifBusy: preferences.followUp,
         });
         setStatus(
           ack.disposition === "queued"
@@ -498,32 +738,18 @@ export default function App() {
   }
   async function addImages(files: FileList | File[]) {
     try {
-      const added = await Promise.all(
-        Array.from(files).map(async (file) => {
-          if (
-            !["image/png", "image/jpeg", "image/webp", "image/gif"].includes(
-              file.type,
-            ) ||
-            file.size > 10 * 1024 * 1024
-          )
-            throw new Error(
-              "Attach PNG, JPG, WebP or GIF images smaller than 10 MB.",
-            );
-          const preview = await new Promise<string>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(String(reader.result));
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-          return {
-            name: file.name,
-            mediaType: file.type,
-            base64Data: preview.split(",")[1],
-            preview,
-          };
-        }),
-      );
+      if (images.length + files.length > 8)
+        throw new Error("Attach up to eight files per message.");
+      setStatus("Preparing attachments…");
+      const added: Attachment[] = [];
+      for (const file of Array.from(files))
+        added.push(await prepareAttachment(file));
       setImages((current) => [...current, ...added]);
+      setStatus(
+        added.some((image) => image.mediaType.startsWith("video/"))
+          ? "Video ready · four frames will be sent to Muse"
+          : "Attachments ready",
+      );
     } catch (err: any) {
       setError(err.message);
     }
@@ -572,15 +798,91 @@ export default function App() {
       if (method === "session/listChanged" || method === "session/nameChanged")
         ignore(refreshSessions());
       if (!id) return;
-      if (method === "turn/started")
+      if (method === "desktop/media")
+        setMedia((prev) => ({
+          ...prev,
+          [id]: { ...prev[id], [p.commandId]: p.media },
+        }));
+      if (
+        [
+          "session/tokenUsage",
+          "session/contextUsage",
+          "session/todoListChanged",
+          "session/goalChanged",
+          "turn/started",
+          "turn/completed",
+        ].includes(method)
+      ) {
+        setSessionStats((prev) => {
+          const held = prev[id] || {};
+          const now = Date.now();
+          return {
+            ...prev,
+            [id]: {
+              ...held,
+              ...(method === "session/tokenUsage" ? { tokenUsage: p } : {}),
+              ...(method === "session/contextUsage"
+                ? { contextUsage: p.contextUsage || p }
+                : {}),
+              ...(method === "session/todoListChanged"
+                ? { todoList: p.todoList || p }
+                : {}),
+              ...(method === "session/goalChanged"
+                ? { goal: p.goal || p }
+                : {}),
+              ...(method === "turn/started"
+                ? { startedAt: now, terminal: "running" }
+                : {}),
+              ...(method === "turn/completed"
+                ? {
+                    terminal: p.terminal,
+                    durationMs: held.startedAt
+                      ? now - held.startedAt
+                      : undefined,
+                  }
+                : {}),
+            },
+          };
+        });
+      }
+      if (method === "turn/started") {
         setTurns((prev) => ({ ...prev, [id]: p.turnId }));
+        setCompleted((prev) => {
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
       if (method === "turn/completed") {
         setTurns((prev) => ({
           ...prev,
           [id]: prev[id] === p.turnId ? null : prev[id],
         }));
         ignore(refreshSessions());
+        setCompleted((prev) => ({ ...prev, [id]: p.terminal }));
+        const settings = preferencesRef.current;
+        if (
+          settings.notifications &&
+          (document.hidden ||
+            id !== activeRef.current ||
+            settings.notificationForeground)
+        )
+          ignore(
+            window.muse.notify({
+              title:
+                p.terminal === "completed"
+                  ? "Muse finished"
+                  : `Muse ${p.terminal}`,
+              body: p.error?.message || "Your conversation has a new response.",
+              sessionId: id,
+              silent: !settings.notificationSound,
+            }),
+          );
         if (id === activeRef.current) {
+          if (preferencesRef.current.autoCollapse)
+            setTab((current) =>
+              current === "activity" ? "conversation" : current,
+            );
           setStatus(
             p.terminal === "completed"
               ? "Ready for your next idea"
@@ -599,6 +901,21 @@ export default function App() {
           else setItems(store.list());
         }
       }
+      if (
+        method === "approval/requested" &&
+        preferencesRef.current.notifications &&
+        (document.hidden ||
+          id !== activeRef.current ||
+          preferencesRef.current.notificationForeground)
+      )
+        ignore(
+          window.muse.notify({
+            title: "Muse needs permission",
+            body: p.toolName || "Open the conversation to review this action.",
+            sessionId: id,
+            silent: !preferencesRef.current.notificationSound,
+          }),
+        );
       if (id !== activeRef.current) return;
       if (method.startsWith("approval/") || method.startsWith("userInput/"))
         ignore(refreshPending());
@@ -621,10 +938,17 @@ export default function App() {
         );
       }
     });
-    const offExit = window.muse.onHostExit(() => {
-      setTurns({});
-      setStatus("Muse host stopped. Refresh to reconnect.");
-      setDiagnostic((prev: any) => ({ ...prev, connected: false }));
+    const offExit = window.muse.onHostExit((exit) => {
+      if (exit.sessionId) {
+        setTurns((prev) => ({ ...prev, [exit.sessionId]: null }));
+        if (exit.sessionId === activeRef.current)
+          setStatus(
+            "Session engine stopped. Reopen this conversation to reconnect.",
+          );
+      } else {
+        setStatus("Muse control host stopped. Refresh to reconnect.");
+        setDiagnostic((prev: any) => ({ ...prev, connected: false }));
+      }
     });
     const offError = window.muse.onProtocolError((text) =>
       setError(`Muse protocol: ${text}`),
@@ -636,6 +960,9 @@ export default function App() {
       window.muse.bootstrap().then(async (result) => {
         if (!alive) return;
         setDiagnostic(result.diagnostic);
+        setWorkspaces(result.workspaces || []);
+        ignore(window.muse.commands().then(setCommands));
+        ignore(window.muse.mcpInventory().then(setMcp));
         setStatus(
           result.diagnostic.error ||
             (result.diagnostic.account?.state === "accountLogin"
@@ -647,7 +974,9 @@ export default function App() {
             result.lastWorkspace,
           );
           if (alive) await hydrateWorkspace(connected.workspace);
-        }
+        } else if (result.diagnostic.connected) ignore(refreshSessions());
+        if (alive && result.requestedSession && result.diagnostic.connected)
+          await loadSession(result.requestedSession);
       }),
     );
     const focus = () => ignore(refreshAccount());
@@ -661,6 +990,17 @@ export default function App() {
       window.removeEventListener("focus", focus);
     };
   }, [refreshAccount, refreshPending, refreshSessions, refreshUsage]);
+  useEffect(
+    () => window.muse.onNavigateSession((id) => void loadSession(id)),
+    [sessions],
+  );
+  useEffect(() => {
+    setSlashIndex(0);
+  }, [prompt]);
+  useEffect(() => {
+    if (prompt.startsWith("/") && workspace && !session && !busy)
+      void run(createSession);
+  }, [prompt.startsWith("/"), workspace, session]);
   useEffect(() => {
     if (!login) return;
     const timer = setInterval(() => {
@@ -699,7 +1039,15 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      style={
+        {
+          "--left-width": `${preferences.leftWidth}px`,
+          "--right-width": `${preferences.rightWidth}px`,
+        } as React.CSSProperties
+      }
+    >
       <div className="window-bar">
         <MuseMark />
         <span>Muse Desktop</span>
@@ -720,7 +1068,7 @@ export default function App() {
         <button
           className="project-switcher"
           onClick={chooseWorkspace}
-          disabled={busy || working}
+          disabled={busy}
         >
           <Folder size={18} />
           <span>
@@ -733,12 +1081,12 @@ export default function App() {
         </button>
         <button
           className="new-chat-button"
-          disabled={busy || working}
+          disabled={busy}
           onClick={() => {
             if (!workspace) void chooseWorkspace();
             else
               void run(async () => {
-                await createSession();
+                await createSession({ fresh: true });
                 setPrompt("");
                 setImages([]);
               });
@@ -767,29 +1115,96 @@ export default function App() {
           />
         </label>
         <nav className="session-list" aria-label="Conversations">
-          {sessions
-            .filter((row) =>
-              sessionTitle(row).toLowerCase().includes(search.toLowerCase()),
-            )
-            .map((row) => (
-              <button
-                key={row.sessionId}
-                disabled={busy}
-                className={`session-row ${row.sessionId === session ? "active" : ""}`}
-                onClick={() => void loadSession(row.sessionId)}
-              >
-                <MessageSquare size={14} />
-                <span>
-                  <b>{sessionTitle(row)}</b>
-                  <small>
-                    {turns[row.sessionId]
-                      ? "Working…"
-                      : timeAgo(row.lastActivityAt || row.updatedAt)}
-                  </small>
-                </span>
-                {turns[row.sessionId] ? <span className="live-dot" /> : null}
-              </button>
-            ))}
+          {groupedWorkspaces.map((root) => {
+            const rows = sessions.filter(
+              (row) =>
+                (row.workspaceRoot || "") === root &&
+                sessionTitle(row).toLowerCase().includes(search.toLowerCase()),
+            );
+            if (search && !rows.length) return null;
+            return (
+              <section className="workspace-group" key={root || "ungrouped"}>
+                <div
+                  className={`workspace-heading ${root === workspace ? "selected" : ""}`}
+                >
+                  <button
+                    className="workspace-collapse"
+                    aria-label={`Toggle ${root ? basename(root) : "Other conversations"}`}
+                    aria-expanded={!collapsed[root]}
+                    onClick={() =>
+                      setCollapsed((prev) => ({ ...prev, [root]: !prev[root] }))
+                    }
+                  >
+                    <ChevronDown
+                      size={12}
+                      className={collapsed[root] ? "closed" : ""}
+                    />
+                  </button>
+                  <button
+                    className="workspace-name"
+                    title={root}
+                    disabled={busy || !root}
+                    onClick={() => void switchWorkspace(root)}
+                  >
+                    <Folder size={13} />
+                    <b>{root ? basename(root) : "Other conversations"}</b>
+                    <small>{rows.length}</small>
+                  </button>
+                  <button
+                    className="icon-button"
+                    title={`New conversation in ${root ? basename(root) : "workspace"}`}
+                    disabled={busy || !root}
+                    onClick={() =>
+                      void run(async () => {
+                        if (root !== workspaceRef.current) {
+                          const connected =
+                            await window.muse.connectWorkspace(root);
+                          await hydrateWorkspace(connected.workspace);
+                        }
+                        await createSession({ fresh: true });
+                      })
+                    }
+                  >
+                    <Plus size={12} />
+                  </button>
+                </div>
+                {!collapsed[root]
+                  ? rows.map((row) => (
+                      <button
+                        key={row.sessionId}
+                        disabled={busy}
+                        className={`session-row ${row.sessionId === session ? "active" : ""} ${turns[row.sessionId] || row.status === "running" ? "running" : completed[row.sessionId] ? "done" : ""}`}
+                        onClick={() => void loadSession(row.sessionId)}
+                        title={sessionTitle(row)}
+                      >
+                        {turns[row.sessionId] || row.status === "running" ? (
+                          <Loader2 className="spin" size={12} />
+                        ) : completed[row.sessionId] ? (
+                          <Check size={12} />
+                        ) : (
+                          <MessageSquare size={12} />
+                        )}
+                        <span>
+                          <b>{sessionTitle(row)}</b>
+                          <small>
+                            {turns[row.sessionId]
+                              ? "Working…"
+                              : completed[row.sessionId] ||
+                                timeAgo(row.lastActivityAt || row.updatedAt)}
+                          </small>
+                        </span>
+                        {row.attention ? (
+                          <span
+                            className="attention-dot"
+                            title="Needs attention"
+                          />
+                        ) : null}
+                      </button>
+                    ))
+                  : null}
+              </section>
+            );
+          })}
           {sessions.length === 0 ? (
             <div className="sidebar-empty">
               <MessageSquare size={20} />
@@ -809,23 +1224,15 @@ export default function App() {
           <button className="sidebar-link" onClick={() => setModal("settings")}>
             <Settings2 size={15} /> Settings <kbd>⌘ ,</kbd>
           </button>
-          <button
-            className="account-button"
-            onClick={() => setModal("account")}
-          >
-            <span className={`account-avatar ${signedIn ? "connected" : ""}`}>
-              {signedIn ? <Check size={17} /> : <LogIn size={17} />}
-            </span>
-            <span>
-              <b>{accountName}</b>
-              <small>
-                {signedIn ? "Using your CLI sign-in" : "Muse Code subscription"}
-              </small>
-            </span>
-            <ChevronDown size={13} />
-          </button>
         </div>
       </aside>
+      <ResizeHandle
+        label="Resize conversations sidebar"
+        value={preferences.leftWidth}
+        onChange={(leftWidth) =>
+          setPreferences((prev) => ({ ...prev, leftWidth }))
+        }
+      />
       <main className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">
@@ -835,6 +1242,15 @@ export default function App() {
             <b>{active ? sessionTitle(active) : "New conversation"}</b>
           </div>
           <div className="top-actions">
+            {!inspector ? (
+              <button
+                className="icon-button"
+                title="Muse account"
+                onClick={() => setModal("account")}
+              >
+                <LogIn size={15} />
+              </button>
+            ) : null}
             <span
               className={`connection-pill ${diagnostic?.connected ? "connected" : ""}`}
             >
@@ -870,6 +1286,19 @@ export default function App() {
           >
             <Command size={14} /> Muse CLI <span>Native</span>
           </button>
+          <button
+            className={tab === "agents" ? "active" : ""}
+            onClick={() => setTab("agents")}
+          >
+            <Users size={14} /> Agents{" "}
+            <span>
+              {
+                items.filter((item) =>
+                  ["subagent", "reminderChild"].includes(item.kind),
+                ).length
+              }
+            </span>
+          </button>
           {session ? (
             <button
               className="rename-button"
@@ -889,7 +1318,20 @@ export default function App() {
             <NativeTerminal
               workspace={workspace}
               visible={tab === "terminal"}
-              theme={theme}
+              theme={{
+                ...theme,
+                colors: {
+                  ...theme.colors,
+                  ...Object.fromEntries(
+                    Object.entries(preferences.colors).filter(([, color]) =>
+                      /^#[a-f0-9]{6}$/i.test(color || ""),
+                    ),
+                  ),
+                },
+              }}
+              fontSize={preferences.codeSize}
+              command={terminalCommand}
+              onCommandUsed={() => setTerminalCommand("")}
             />
           </Suspense>
         ) : null}
@@ -903,6 +1345,22 @@ export default function App() {
               target.scrollHeight - target.scrollTop - target.clientHeight < 80;
           }}
         >
+          {tab === "agents" ? (
+            <AgentsPanel
+              items={items}
+              sessionId={session}
+              onError={setError}
+              onRefresh={() => void refreshSessions()}
+            />
+          ) : null}
+          {tab === "activity" ? (
+            <SessionDetails
+              session={active || { sessionId: session, modelId }}
+              stats={sessionStats[session] || {}}
+              items={items}
+              policy={permissionProfile}
+            />
+          ) : null}
           {items.length === 0 && tab === "conversation" ? (
             <div className="welcome">
               <div className="hero-art">
@@ -958,7 +1416,10 @@ export default function App() {
               </div>
             </div>
           ) : null}
-          <div className="transcript">
+          <div
+            className="transcript"
+            style={{ display: tab === "agents" ? "none" : undefined }}
+          >
             {nextCursor ? (
               <button
                 className="text-button load-earlier"
@@ -985,12 +1446,23 @@ export default function App() {
                 Load earlier messages
               </button>
             ) : null}
-            {showItems.map((item) => (
-              <TranscriptItem
-                key={item.itemId}
-                item={{ ...item, sessionId: session }}
+            {tab === "conversation" ? (
+              <ConversationTimeline
+                items={items}
+                sessionId={session}
+                workspace={workspace}
+                working={working}
+                autoCollapse={preferences.autoCollapse}
+                media={media[session] || {}}
               />
-            ))}
+            ) : (
+              showItems.map((item) => (
+                <TranscriptItem
+                  key={item.itemId}
+                  item={{ ...item, sessionId: session, workspace }}
+                />
+              ))
+            )}
             {tab === "activity" && tasks.length === 0 ? (
               <div className="activity-empty">
                 <Terminal size={24} />
@@ -1079,7 +1551,11 @@ export default function App() {
               <div className="image-attachments">
                 {images.map((image, index) => (
                   <div key={`${image.name}-${index}`}>
-                    <img src={image.preview} alt={image.name} />
+                    {image.mediaType.startsWith("video/") ? (
+                      <video src={image.preview} preload="metadata" />
+                    ) : (
+                      <img src={image.preview} alt={image.name} />
+                    )}
                     <span>{image.name}</span>
                     <button
                       title={`Remove ${image.name}`}
@@ -1092,6 +1568,35 @@ export default function App() {
                       <X size={12} />
                     </button>
                   </div>
+                ))}
+              </div>
+            ) : null}
+            {slashOptions.length ? (
+              <div
+                className="slash-menu"
+                role="listbox"
+                aria-label="Muse slash commands"
+              >
+                {slashOptions.map((command, index) => (
+                  <button
+                    id={`slash-${index}`}
+                    key={command.name}
+                    role="option"
+                    aria-selected={index === slashIndex}
+                    className={index === slashIndex ? "selected" : ""}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => chooseCommand(command)}
+                  >
+                    <b>/{command.name}</b>
+                    <span>{command.description}</span>
+                    <small>
+                      {command.route === "native"
+                        ? "CLI"
+                        : command.route === "skill"
+                          ? "Skill"
+                          : "Desktop"}
+                    </small>
+                  </button>
                 ))}
               </div>
             ) : null}
@@ -1112,10 +1617,37 @@ export default function App() {
                   void addImages(event.clipboardData.files);
                 }
               }}
+              aria-controls={slashOptions.length ? "slash-menu" : undefined}
+              aria-activedescendant={
+                slashOptions.length ? `slash-${slashIndex}` : undefined
+              }
               onKeyDown={(event) => {
+                if (
+                  slashOptions.length &&
+                  ["ArrowUp", "ArrowDown", "Tab", "Enter", "Escape"].includes(
+                    event.key,
+                  )
+                ) {
+                  event.preventDefault();
+                  if (event.key === "ArrowUp" || event.key === "ArrowDown")
+                    setSlashIndex(
+                      (index) =>
+                        (index +
+                          (event.key === "ArrowDown" ? 1 : -1) +
+                          slashOptions.length) %
+                        slashOptions.length,
+                    );
+                  else if (event.key === "Escape") setPrompt(prompt + " ");
+                  else
+                    chooseCommand(slashOptions[slashIndex] || slashOptions[0]);
+                  return;
+                }
                 if (
                   event.key === "Enter" &&
                   !event.shiftKey &&
+                  (preferences.sendKey === "enter" ||
+                    event.ctrlKey ||
+                    event.metaKey) &&
                   !event.nativeEvent.isComposing
                 ) {
                   event.preventDefault();
@@ -1128,7 +1660,7 @@ export default function App() {
               <div className="composer-left">
                 <button
                   className="icon-button"
-                  title="Attach images"
+                  title="Attach images or videos"
                   onClick={() => fileRef.current?.click()}
                 >
                   <ImagePlus size={17} />
@@ -1137,7 +1669,7 @@ export default function App() {
                   ref={fileRef}
                   type="file"
                   multiple
-                  accept="image/png,image/jpeg,image/webp,image/gif"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
                   hidden
                   onChange={(event) => {
                     if (event.target.files) void addImages(event.target.files);
@@ -1145,54 +1677,106 @@ export default function App() {
                   }}
                 />
                 <span className="control-divider" />
-                <label className="model-select">
-                  <Sparkles size={14} />
-                  <select
-                    aria-label="Model"
-                    value={modelId}
-                    disabled={busy}
-                    onChange={(event) => {
-                      const selected = event.target.value;
-                      if (session)
-                        void run(async () => {
-                          await window.muse.setModel(
-                            session,
-                            models.find((row) => row.modelId === selected),
-                          );
-                          setModelId(selected);
-                        });
-                      else setModelId(selected);
-                    }}
-                  >
-                    <option value="">Muse default</option>
-                    {models.map((model) => (
-                      <option
-                        key={`${model.providerId}:${model.modelId}`}
-                        value={model.modelId}
-                      >
-                        {model.displayLabel || model.modelId}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={11} />
-                </label>
-                <label className="effort-select">
-                  <Zap size={13} />
-                  <select
-                    aria-label="Reasoning effort"
-                    value={reasoning}
-                    onChange={(event) => setReasoning(event.target.value)}
-                  >
-                    {efforts.map((effort) => (
-                      <option key={effort} value={effort}>
-                        {effort === "default"
-                          ? "CLI reasoning"
-                          : `${effort} effort`}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={11} />
-                </label>
+                <Select
+                  compact
+                  label="Model"
+                  value={modelId}
+                  disabled={busy || readOnly}
+                  options={[
+                    { value: "", label: "Muse default" },
+                    ...models.map((model) => ({
+                      value: model.modelId,
+                      label: model.displayLabel || model.modelId,
+                      description: model.providerId,
+                    })),
+                  ]}
+                  onChange={(selected) => {
+                    if (session && selected)
+                      void run(async () => {
+                        await window.muse.setModel(
+                          session,
+                          models.find((row) => row.modelId === selected),
+                        );
+                        setModelId(selected);
+                      });
+                    else setModelId(selected);
+                  }}
+                />
+                <Select
+                  compact
+                  label="Reasoning effort"
+                  value={reasoning}
+                  options={efforts.map((effort) => ({
+                    value: effort,
+                    label:
+                      effort === "default"
+                        ? "CLI reasoning"
+                        : `${effort} effort`,
+                  }))}
+                  onChange={setReasoning}
+                />
+                <Select
+                  compact
+                  label="Permissions"
+                  value={permissionProfile}
+                  disabled={busy || working || readOnly}
+                  options={[
+                    {
+                      value: "standard",
+                      label: "Sandbox",
+                      description: "Muse sandbox and approval rules",
+                    },
+                    {
+                      value: "readonly",
+                      label: "Read only",
+                      description: "Writes and shell disabled",
+                    },
+                    {
+                      value: "yolo",
+                      label: "YOLO",
+                      description:
+                        "Allow all · sandbox disabled · trusted workspace",
+                    },
+                  ]}
+                  onChange={(value) => void changePermissions(value)}
+                />
+                {working ? (
+                  <Select
+                    compact
+                    label="Follow-up behavior"
+                    value={preferences.followUp}
+                    options={[
+                      { value: "queue", label: "Queue" },
+                      { value: "steer", label: "Steer" },
+                    ]}
+                    onChange={(followUp) =>
+                      setPreferences((prev) => ({
+                        ...prev,
+                        followUp: followUp as "queue" | "steer",
+                      }))
+                    }
+                  />
+                ) : null}
+                <button
+                  className="icon-button"
+                  title="Slash commands"
+                  onClick={() => {
+                    setPrompt("/");
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  <Command size={15} />
+                </button>
+                <button
+                  className="icon-button"
+                  title="Delegate to agents"
+                  onClick={() => {
+                    setPrompt("/agents ");
+                    textareaRef.current?.focus();
+                  }}
+                >
+                  <Users size={15} />
+                </button>
               </div>
               <div className="composer-right">
                 {working ? (
@@ -1229,164 +1813,205 @@ export default function App() {
               {busy ? "Working…" : status}
             </span>
             <span>
-              <kbd>↵</kbd> Send <span className="footer-separator">·</span>{" "}
-              <kbd>⇧ ↵</kbd> New line
+              <kbd>{preferences.sendKey === "enter" ? "↵" : "Ctrl ↵"}</kbd> Send{" "}
+              <span className="footer-separator">·</span> <kbd>⇧ ↵</kbd> New
+              line
             </span>
           </div>
         </div>
       </main>
       {inspector ? (
-        <aside className="inspector">
-          <div className="inspector-heading">
-            WORKSPACE DETAILS{" "}
-            <button
-              className="icon-button"
-              title="Hide details"
-              onClick={() => setInspector(false)}
-            >
-              <X size={13} />
-            </button>
-          </div>
-          <div className="workspace-preview">
-            <div className="folder-art">
-              <Folder size={35} />
-            </div>
-            <b>{workspace ? basename(workspace) : "Your next project"}</b>
-            <small title={workspace}>
-              {workspace || "Open a folder to get started"}
-            </small>
-            {active?.branch ? (
-              <span className="branch-chip">
-                <GitBranch size={12} /> {active.branch}
-              </span>
-            ) : null}
-          </div>
-          <div className="inspector-section">
-            <h3>
-              <ShieldCheck size={14} /> Permissions
-            </h3>
-            <label className="permission-select">
-              <select
-                aria-label="Approval mode"
-                disabled={busy}
-                value={approvalMode}
-                onChange={(event) => {
-                  const value = event.target.value;
-                  if (session && value)
-                    void run(async () => {
-                      await window.muse.setApprovalMode(session, value);
-                      setApprovalMode(value);
-                    });
-                  else setApprovalMode(value);
-                }}
-              >
-                {modes.map((mode) => (
-                  <option value={mode.id} key={mode.id}>
-                    {mode.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown size={12} />
-            </label>
-            <p>
-              Muse handles the sandbox and reviews actions using your CLI
-              configuration.
-            </p>
-          </div>
-          <div className="inspector-section usage-section">
-            <h3>
-              <Zap size={14} /> Subscription usage{" "}
+        <>
+          <ResizeHandle
+            label="Resize details sidebar"
+            value={preferences.rightWidth}
+            reverse
+            onChange={(rightWidth) =>
+              setPreferences((prev) => ({ ...prev, rightWidth }))
+            }
+          />
+          <aside className="inspector">
+            <div className="inspector-heading">
+              WORKSPACE DETAILS{" "}
               <button
                 className="icon-button"
-                title="Refresh subscription usage"
-                onClick={() => void run(refreshUsage)}
+                title="Hide details"
+                onClick={() => setInspector(false)}
               >
-                <RefreshCw size={11} />
+                <X size={13} />
               </button>
-            </h3>
-            {usage ? (
-              <>
-                {[
-                  ["Current window", usage.window],
-                  ["Weekly", usage.weekly],
-                ].map(([label, block]: any) => (
-                  <div className="usage-meter" key={label}>
-                    <div>
-                      <span>{label}</span>
-                      <b>{block.usedPercent}%</b>
-                    </div>
-                    <div className="meter-track">
-                      <i
-                        style={{
-                          width: `${Math.min(100, block.usedPercent)}%`,
-                        }}
-                      />
-                    </div>
-                    <small>
-                      Resets{" "}
-                      {new Date(block.resetsAtMs).toLocaleString(undefined, {
-                        month: "short",
-                        day: "numeric",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
-                    </small>
-                  </div>
-                ))}
-                <small className="usage-asof">
-                  Observed {new Date(usage.observedAtMs).toLocaleTimeString()}
-                </small>
-              </>
-            ) : (
-              <div className="usage-unavailable">
-                <span>Waiting for Muse usage</span>
-                <small>
-                  Appears when the CLI receives your subscription limits.
-                </small>
-              </div>
-            )}
-          </div>
-          <div className="inspector-section">
-            <h3>
-              <Command size={14} /> Project skills <span>{skills.length}</span>
-            </h3>
-            {skills.length ? (
-              skills.slice(0, 5).map((skill) => (
-                <button
-                  className="skill-row"
-                  key={skill.selector}
-                  title={skill.description}
-                  onClick={() => {
-                    setPrompt(`/${skill.selector} `);
-                    textareaRef.current?.focus();
-                  }}
-                >
-                  /{skill.selector}
-                  <ArrowUpRight size={11} />
-                </button>
-              ))
-            ) : (
-              <p>
-                Skills, rules, hooks, and MCP configuration are loaded by Muse
-                for each project session.
-              </p>
-            )}
-          </div>
-          <div className="engine-card">
-            <div>
-              <MuseMark />
-              <b>One engine. All yours.</b>
             </div>
-            <p>
-              Your local Muse Code does the work. Your sign-in stays with the
-              CLI.
-            </p>
-            <span>
-              <i />{" "}
-              {signedIn ? "CLI account connected" : "Official Muse runtime"}
-            </span>
-          </div>
-        </aside>
+            <div className="workspace-preview">
+              <div className="folder-art">
+                <Folder size={35} />
+              </div>
+              <b>{workspace ? basename(workspace) : "Your next project"}</b>
+              <small title={workspace}>
+                {workspace || "Open a folder to get started"}
+              </small>
+              {active?.branch ? (
+                <span className="branch-chip">
+                  <GitBranch size={12} /> {active.branch}
+                </span>
+              ) : null}
+            </div>
+            <div className="inspector-section">
+              <h3>
+                <ShieldCheck size={14} /> Approval rules
+              </h3>
+              <Select
+                label="Approval mode"
+                disabled={
+                  busy || working || readOnly || permissionProfile === "yolo"
+                }
+                value={permissionProfile === "yolo" ? "allowAll" : approvalMode}
+                options={[
+                  ...modes.map((mode) => ({
+                    value: mode.id,
+                    label: mode.label,
+                  })),
+                  {
+                    value: "allowAll",
+                    label: "YOLO · Allow all",
+                    disabled: true,
+                  },
+                ]}
+                onChange={(value) =>
+                  void changePermissions(permissionProfile, value)
+                }
+              />
+              <p>
+                {permissionProfile === "yolo"
+                  ? "All approvals allowed. Sandbox disabled for this conversation."
+                  : "Apply permission changes when this conversation and its agents are idle."}
+              </p>
+            </div>
+            <div className="inspector-section">
+              <McpPanel
+                inventory={mcp}
+                onRefresh={() =>
+                  void run(async () => setMcp(await window.muse.mcpInventory()))
+                }
+                onOpenCli={() => nativeCommand("/mcp")}
+              />
+            </div>
+            <div className="inspector-section account-usage">
+              <button
+                className="account-button"
+                onClick={() => setModal("account")}
+              >
+                <span
+                  className={`account-avatar ${signedIn ? "connected" : ""}`}
+                >
+                  {signedIn ? <Check size={17} /> : <LogIn size={17} />}
+                </span>
+                <span>
+                  <b>{accountName}</b>
+                  <small>
+                    {signedIn
+                      ? "Using your CLI sign-in"
+                      : "Muse Code subscription"}
+                  </small>
+                </span>
+                <ChevronDown size={13} />
+              </button>
+            </div>
+            <div className="inspector-section usage-section">
+              <h3>
+                <Zap size={14} /> Subscription usage{" "}
+                <button
+                  className="icon-button"
+                  title="Refresh subscription usage"
+                  onClick={() => void run(refreshUsage)}
+                >
+                  <RefreshCw size={11} />
+                </button>
+              </h3>
+              {usage ? (
+                <>
+                  {[
+                    ["Current window", usage.window],
+                    ["Weekly", usage.weekly],
+                  ].map(([label, block]: any) => (
+                    <div className="usage-meter" key={label}>
+                      <div>
+                        <span>{label}</span>
+                        <b>{block.usedPercent}%</b>
+                      </div>
+                      <div className="meter-track">
+                        <i
+                          style={{
+                            width: `${Math.min(100, block.usedPercent)}%`,
+                          }}
+                        />
+                      </div>
+                      <small>
+                        Resets{" "}
+                        {new Date(block.resetsAtMs).toLocaleString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </small>
+                    </div>
+                  ))}
+                  <small className="usage-asof">
+                    Observed {new Date(usage.observedAtMs).toLocaleTimeString()}
+                  </small>
+                </>
+              ) : (
+                <div className="usage-unavailable">
+                  <span>Waiting for Muse usage</span>
+                  <small>
+                    Appears when the CLI receives your subscription limits.
+                  </small>
+                </div>
+              )}
+            </div>
+            <div className="inspector-section">
+              <h3>
+                <Command size={14} /> Project skills{" "}
+                <span>{skills.length}</span>
+              </h3>
+              {skills.length ? (
+                skills.slice(0, 5).map((skill) => (
+                  <button
+                    className="skill-row"
+                    key={skill.selector}
+                    title={skill.description}
+                    onClick={() => {
+                      setPrompt(`/${skill.selector} `);
+                      textareaRef.current?.focus();
+                    }}
+                  >
+                    /{skill.selector}
+                    <ArrowUpRight size={11} />
+                  </button>
+                ))
+              ) : (
+                <p>
+                  Skills, rules, hooks, and MCP configuration are loaded by Muse
+                  for each project session.
+                </p>
+              )}
+            </div>
+            <div className="engine-card">
+              <div>
+                <MuseMark />
+                <b>One engine. All yours.</b>
+              </div>
+              <p>
+                Your local Muse Code does the work. Your sign-in stays with the
+                CLI.
+              </p>
+              <span>
+                <i />{" "}
+                {signedIn ? "CLI account connected" : "Official Muse runtime"}
+              </span>
+            </div>
+          </aside>
+        </>
       ) : null}
       {error ? (
         <div className="error-toast" role="alert">
@@ -1582,6 +2207,10 @@ export default function App() {
                     </span>
                   </label>
                 </fieldset>
+                <DesktopSettings
+                  value={preferences}
+                  onChange={setPreferences}
+                />
                 <div className="setting-row">
                   <div>
                     <b>Muse Code runtime</b>

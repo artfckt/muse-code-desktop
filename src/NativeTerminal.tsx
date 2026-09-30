@@ -13,20 +13,31 @@ export default function NativeTerminal({
   workspace,
   visible,
   theme,
+  fontSize = 13,
+  command = "",
+  onCommandUsed,
 }: {
   workspace: string;
   visible: boolean;
   theme: Theme;
+  fontSize?: number;
+  command?: string;
+  onCommandUsed?: () => void;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<(() => void) | null>(null);
   const latestTheme = useRef(theme);
   latestTheme.current = theme;
+  const latestFont = useRef(fontSize);
+  latestFont.current = fontSize;
   useEffect(() => {
-    if (terminalRef.current)
+    if (terminalRef.current) {
       terminalRef.current.options.theme = terminalTheme(theme);
-  }, [theme]);
+      terminalRef.current.options.fontSize = fontSize;
+      fitRef.current?.();
+    }
+  }, [theme, fontSize]);
   const [cwd, setCwd] = useState(workspace);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
@@ -58,7 +69,7 @@ export default function NativeTerminal({
         if (cancelled || !element.current) return;
         const terminal = new Terminal({
           cursorBlink: true,
-          fontSize: 13,
+          fontSize: latestFont.current,
           fontFamily: 'Consolas, "SFMono-Regular", monospace',
           scrollback: 10000,
           allowProposedApi: false,
@@ -153,6 +164,29 @@ export default function NativeTerminal({
           <ExternalLink size={13} />
         </button>
       </div>
+      {command ? (
+        <div className="terminal-notice command-transfer">
+          <code>{command}</code>
+          <span>
+            Focus the CLI prompt, insert the command, then press Enter.
+          </span>
+          <button
+            className="secondary-button"
+            disabled={starting || exited}
+            onClick={() =>
+              void window.muse
+                .terminalWrite(command)
+                .then(() => {
+                  onCommandUsed?.();
+                  terminalRef.current?.focus();
+                })
+                .catch((err) => setError(err.message))
+            }
+          >
+            Insert command
+          </button>
+        </div>
+      ) : null}
       {starting ? (
         <div className="terminal-notice">
           <Loader2 size={14} className="spin" /> Starting your installed Muse

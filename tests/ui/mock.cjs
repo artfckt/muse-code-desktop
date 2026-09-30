@@ -27,6 +27,10 @@ const model = {
 window.testBridge = {
   calls: [],
   emit,
+  setSessions: (value) => {
+    sessions = value;
+    emit({ method: "session/listChanged", params: {} });
+  },
   setAccount: (value) => {
     account = value;
     emit({ method: "account/changed", params: value });
@@ -41,6 +45,42 @@ window.testBridge = {
   },
 };
 window.muse = {
+  commands: async () => [
+    { name: "new", description: "Start a conversation", route: "desktop" },
+    { name: "mcp", description: "MCP manager", route: "desktop" },
+    { name: "permissions", description: "Permissions", route: "desktop" },
+    { name: "agents", description: "Delegate to agents", route: "desktop" },
+    { name: "rewind", description: "Rewind history", route: "native" },
+  ],
+  mcpInventory: async () => ({
+    servers: [
+      { name: "project-tools", transport: "stdio", status: "configured" },
+    ],
+  }),
+  saveAttachment: async (input) => ({
+    id: "media-1",
+    name: input.name,
+    mediaType: input.mediaType,
+    path: "/saved/image.png",
+    url: `data:${input.mediaType};base64,${input.base64Data}`,
+  }),
+  sessionMedia: async () => ({}),
+  openLocal: async (file) => window.testBridge.calls.push(["openLocal", file]),
+  notify: async (payload) => (
+    window.testBridge.calls.push(["notify", payload]),
+    { supported: true }
+  ),
+  openAgent: async (payload) =>
+    window.testBridge.calls.push(["openAgent", payload]),
+  openConversation: async (id) =>
+    window.testBridge.calls.push(["openConversation", id]),
+  agentControl: async (action, payload) =>
+    window.testBridge.calls.push(["agentControl", action, payload]),
+  setPermissions: async (...args) =>
+    window.testBridge.calls.push(["setPermissions", ...args]),
+  forkSession: async () => ({ session: { sessionId: "fork-1" } }),
+  subscribeSession: async () => ({ viewCursor: "head" }),
+  onNavigateSession: () => () => {},
   setWindowTheme: async (colors) =>
     window.testBridge.calls.push(["setWindowTheme", colors]),
   terminalStart: async () => (
@@ -63,7 +103,10 @@ window.muse = {
   }),
   diagnose: async () => diagnostic(),
   chooseWorkspace: async () => ({ workspace }),
-  connectWorkspace: async () => ({ workspace }),
+  connectWorkspace: async (root) => (
+    window.testBridge.calls.push(["connectWorkspace", root]),
+    { workspace: root }
+  ),
   listSessions: async () => ({ sessions }),
   listModels: async () => ({ models: [model] }),
   listSkills: async () => ({
@@ -77,7 +120,8 @@ window.muse = {
     ],
   }),
   usage: async () => ({}),
-  startSession: async () => {
+  startSession: async (options) => {
+    window.testBridge.calls.push(["startSession", options]);
     const id = `session-${sessions.length + 1}`;
     sessions.unshift({
       sessionId: id,
@@ -85,6 +129,8 @@ window.muse = {
       updatedAt: new Date().toISOString(),
       status: "idle",
       modelId: model.modelId,
+      workspaceRoot: workspace,
+      permissionProfile: options?.permissionProfile || "standard",
     });
     return { sessionId: id };
   },
@@ -128,6 +174,7 @@ window.muse = {
           revision: 1,
           status: "completed",
           text: payload.text,
+          commandId: "command-1",
         },
       },
     });
@@ -179,7 +226,7 @@ window.muse = {
         params: { sessionId: id, turnId, terminal: "completed" },
       });
     }, 120);
-    return { turnId, disposition: "started" };
+    return { turnId, commandId: "command-1", disposition: "started" };
   },
   login: async () => ({
     mode: "device-code",

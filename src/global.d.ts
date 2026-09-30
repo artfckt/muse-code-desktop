@@ -2,6 +2,31 @@ export {};
 declare global {
   interface Window {
     muse: {
+      commands(): Promise<any[]>;
+      mcpInventory(): Promise<any>;
+      saveAttachment(attachment: {
+        name: string;
+        mediaType: string;
+        base64Data: string;
+      }): Promise<any>;
+      sessionMedia(id: string): Promise<Record<string, any[]>>;
+      openLocal(path: string): Promise<void>;
+      notify(payload: {
+        title: string;
+        body: string;
+        sessionId?: string;
+        silent?: boolean;
+      }): Promise<any>;
+      openAgent(agent: {
+        sessionId: string;
+        parentSessionId?: string;
+      }): Promise<any>;
+      agentControl(action: string, payload: any): Promise<any>;
+      openConversation(id: string): Promise<any>;
+      setPermissions(id: string, profile: string, mode: string): Promise<any>;
+      forkSession(id: string): Promise<any>;
+      subscribeSession(id: string): Promise<any>;
+      onNavigateSession(listener: (id: string) => void): () => void;
       setWindowTheme(colors: {
         background: string;
         foreground: string;

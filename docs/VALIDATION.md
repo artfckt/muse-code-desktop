@@ -1,4 +1,16 @@
-# Desktop 0.3 validation
+# Desktop 0.4 validation
+
+## Windows 0.4 feature validation — 2026-09-30
+
+Validated against the installed Muse Code 1.3.0 (1.3.0-R3401.1) and its generated experimental MSP schema. Isolated echo-provider tests verify two simultaneous root hosts, real YOLO launch flags, independent permission profiles, host replacement/resume after changing the sandbox profile, global paginated history, and read-only child transcript routing. No paid model is used by these tests.
+
+Unit coverage also checks busy-turn/agent guards, native subscription authentication, authoritative transcript revisions, persistent media associations, byte-range playback, rejecting non-media paths, and recovery of older native image intake records while preserving desktop video attachments.
+
+Browser coverage checks workspace grouping while another chat runs; completed activity collapse; Windows links with spaces/parentheses; tables, task lists, math, syntax highlighting and Mermaid; keyboard-operated custom permission dropdowns and YOLO payloads; native slash commands and project skills; agent controls and separate-window bridge calls; saved colors/font/sidebar widths and text-selection preferences; session usage/MCP inventory/notifications; and actual WebM decoding into four JPEG frames with playable transcript media. Existing account, approvals, questions, resume, theme and terminal tests remain in the suite.
+
+Browser MCP and agent-control data is a deterministic fixture. Actual model-created multi-agent work, live MCP tools, OS notification delivery and subscription usage still depend on the user's native CLI, configured servers and account. Video model input is sampled frames, not native video. Raw HTML in Markdown is not executed.
+
+Release validation passed TypeScript, all 18 host/protocol/media tests (including all three optional real-native tests), and 22 browser UI tests. The Windows x64 NSIS installer was built locally with Electron 38.8.6 and passed the packaged renderer, preload, native window colors, persisted-image custom protocol, separate conversation window and native PTY smoke checks using isolated application data. Runtime dependency audit reports no known advisories; build-tool dependencies retain upstream advisories.
 
 ## Windows 0.3 release — 2026-09-30
 

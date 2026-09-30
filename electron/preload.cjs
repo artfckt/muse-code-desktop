@@ -9,6 +9,19 @@ const subscribe = (channel) => (listener) => {
   return () => ipcRenderer.removeListener(`muse:${channel}`, handler);
 };
 contextBridge.exposeInMainWorld("muse", {
+  commands: invoke("commands"),
+  mcpInventory: invoke("mcp-inventory"),
+  saveAttachment: invoke("save-attachment"),
+  sessionMedia: invoke("session-media"),
+  openLocal: invoke("open-local"),
+  notify: invoke("notify"),
+  openAgent: invoke("open-agent"),
+  openConversation: invoke("open-conversation"),
+  agentControl: invoke("agent-control"),
+  setPermissions: invoke("set-permissions"),
+  forkSession: invoke("fork-session"),
+  subscribeSession: invoke("subscribe-session"),
+  onNavigateSession: subscribe("navigate-session"),
   setWindowTheme: invoke("window-theme"),
   bootstrap: invoke("bootstrap"),
   diagnose: invoke("diagnose"),

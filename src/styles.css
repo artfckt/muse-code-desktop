@@ -96,7 +96,7 @@ input {
 }
 kbd {
   font-family: inherit;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--faint);
 }
 select {
@@ -140,7 +140,7 @@ textarea {
   border-bottom: 1px solid var(--border);
   -webkit-app-region: drag;
   color: var(--muted);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   letter-spacing: 0.15px;
   padding-right: 150px;
   user-select: none;
@@ -153,7 +153,7 @@ textarea {
 .window-caption {
   margin-left: auto;
   color: var(--faint);
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .muse-mark {
   width: 27px;
@@ -193,21 +193,21 @@ textarea {
   place-items: center;
 }
 .brand b {
-  font-size: 23px;
+  font-size: calc(var(--ui-size, 11px) * 2.09091);
   font-weight: 600;
   letter-spacing: -0.9px;
   display: block;
   line-height: 1.15;
 }
 .brand b span {
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   color: var(--muted);
   letter-spacing: 0.1px;
   font-weight: 450;
   margin-left: 6px;
 }
 .brand small {
-  font-size: 7px;
+  font-size: calc(var(--ui-size, 11px) * 0.63636);
   letter-spacing: 1.8px;
   color: var(--faint);
 }
@@ -232,14 +232,14 @@ textarea {
 }
 .project-switcher b {
   display: block;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 .project-switcher small {
   display: block;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   margin-top: 4px;
 }
@@ -259,7 +259,7 @@ textarea {
   border-radius: 8px;
   background: color-mix(in srgb, var(--accent) 4.3%, transparent);
   color: var(--accent);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   font-weight: 500;
 }
 .new-chat-button:hover {
@@ -275,7 +275,7 @@ textarea {
   justify-content: space-between;
   margin-top: 31px;
   margin-bottom: 8px;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   letter-spacing: 1.5px;
   color: var(--faint);
   padding: 0 9px;
@@ -303,7 +303,7 @@ textarea {
 }
 .search-field input {
   padding: 6px 0;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   width: 100%;
   color: var(--muted);
 }
@@ -338,7 +338,7 @@ textarea {
 }
 .session-row b {
   color: var(--muted);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   font-weight: 450;
   display: block;
   overflow: hidden;
@@ -347,7 +347,7 @@ textarea {
   line-height: 1.55;
 }
 .session-row small {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   display: block;
   margin-top: 3px;
@@ -377,12 +377,12 @@ textarea {
   color: var(--elevated);
 }
 .sidebar-empty p {
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   color: var(--faint);
   margin-bottom: 6px;
 }
 .sidebar-empty small {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   line-height: 1.6;
   color: var(--faint);
 }
@@ -395,7 +395,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--muted);
   padding: 11px 10px;
   width: 100%;
@@ -423,7 +423,7 @@ textarea {
   min-width: 0;
 }
 .account-button b {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   font-weight: 500;
   display: block;
   overflow: hidden;
@@ -431,7 +431,7 @@ textarea {
   white-space: nowrap;
 }
 .account-button small {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   display: block;
   margin-top: 5px;
@@ -479,7 +479,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--faint);
   min-width: 0;
 }
@@ -504,7 +504,7 @@ textarea {
   align-items: center;
   gap: 6px;
   color: var(--faint);
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   padding: 6px 9px;
   border: 1px solid color-mix(in srgb, var(--text) 3.1%, transparent);
   border-radius: 30px;
@@ -534,7 +534,7 @@ textarea {
   gap: 7px;
   height: 100%;
   padding: 0;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--faint);
   position: relative;
 }
@@ -552,7 +552,7 @@ textarea {
   border-radius: 1px;
 }
 .conversation-tabs span {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   border-radius: 4px;
   background: color-mix(in srgb, var(--text) 2.4%, transparent);
   padding: 2px 5px;
@@ -636,7 +636,7 @@ textarea {
 .art-spark {
   position: absolute;
   color: color-mix(in srgb, var(--accent) 36.9%, transparent);
-  font-size: 15px;
+  font-size: calc(var(--ui-size, 11px) * 1.36364);
 }
 .spark-one {
   left: 21px;
@@ -649,7 +649,7 @@ textarea {
   color: color-mix(in srgb, var(--mint) 43.1%, transparent);
 }
 .hero-eyebrow {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   letter-spacing: 2.4px;
   color: var(--accent);
   display: flex;
@@ -679,7 +679,7 @@ textarea {
 }
 .welcome > p {
   color: var(--faint);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   line-height: 1.9;
   margin: 19px 0;
 }
@@ -691,7 +691,7 @@ textarea {
   gap: 8px;
   border-radius: 7px;
   padding: 10px 15px;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   font-weight: 550;
   min-height: 35px;
 }
@@ -712,7 +712,7 @@ textarea {
   background: color-mix(in srgb, var(--text) 3.5%, transparent);
 }
 .hero-action {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   margin: 1px 0 8px;
   padding: 10px 17px;
 }
@@ -752,14 +752,14 @@ textarea {
   color: var(--mint);
 }
 .suggestion-grid b {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   display: block;
   font-weight: 500;
   color: var(--muted);
   letter-spacing: -0.1px;
 }
 .suggestion-grid small {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   display: block;
   color: var(--faint);
   line-height: 1.6;
@@ -777,7 +777,7 @@ textarea {
   align-items: center;
   gap: 6px;
   margin-top: 20px;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
 }
 .transcript {
@@ -789,7 +789,7 @@ textarea {
 .user-message {
   margin: 23px 0 23px auto;
   max-width: 85%;
-  font-size: 13px;
+  font-size: calc(var(--ui-size, 11px) * 1.18182);
   color: var(--text);
   padding: 14px 19px;
   background: var(--elevated);
@@ -801,7 +801,7 @@ textarea {
 }
 .attachment-note {
   display: block;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--faint);
   margin-top: 9px;
 }
@@ -813,7 +813,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   color: var(--text);
   margin-bottom: 13px;
 }
@@ -823,7 +823,7 @@ textarea {
   color: var(--accent);
 }
 .message-heading small {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
   margin-left: 3px;
 }
@@ -831,7 +831,7 @@ textarea {
   margin-left: auto;
 }
 .markdown {
-  font-size: 13px;
+  font-size: calc(var(--ui-size, 11px) * 1.18182);
   line-height: 1.8;
   color: var(--mint);
 }
@@ -846,7 +846,7 @@ textarea {
 .markdown h3,
 .markdown h4 {
   font-family: inherit;
-  font-size: 16px;
+  font-size: calc(var(--ui-size, 11px) * 1.45455);
   color: var(--text);
   font-weight: 550;
   margin: 22px 0 12px;
@@ -856,7 +856,7 @@ textarea {
 }
 .markdown code {
   font-family: "SFMono-Regular", Consolas, monospace;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   background: color-mix(in srgb, var(--text) 3.1%, transparent);
   padding: 2px 5px;
   border-radius: 4px;
@@ -889,7 +889,7 @@ textarea {
   display: block;
   overflow: auto;
   border-collapse: collapse;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   margin: 16px 0;
 }
 .markdown td,
@@ -913,7 +913,7 @@ textarea {
   border-radius: 8px;
   background: color-mix(in srgb, var(--text) 0.8%, transparent);
   max-width: 100%;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .tool-card summary {
   list-style: none;
@@ -934,7 +934,7 @@ textarea {
   white-space: nowrap;
 }
 .tool-card summary small {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
 }
 .tool-card[open] summary > svg:last-child {
@@ -983,7 +983,7 @@ textarea {
   color: var(--muted);
 }
 .activity-empty p {
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   line-height: 1.8;
   max-width: 350px;
   margin: 0 auto;
@@ -994,7 +994,7 @@ textarea {
   align-items: center;
   padding: 21px 0;
   color: var(--faint);
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .thinking-dots {
   display: flex;
@@ -1031,7 +1031,7 @@ textarea {
 .composer textarea {
   padding: 20px 19px 6px;
   width: 100%;
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   min-height: 74px;
   max-height: 180px;
   line-height: 1.65;
@@ -1066,7 +1066,7 @@ textarea {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--mint);
   min-width: 0;
 }
@@ -1075,13 +1075,13 @@ textarea {
 }
 .model-select select {
   max-width: 165px;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
 }
 .effort-select {
   color: var(--faint);
 }
 .effort-select select {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   max-width: 105px;
 }
 .composer-right {
@@ -1120,7 +1120,7 @@ textarea {
   justify-content: space-between;
   gap: 10px;
   padding: 12px 5px 0;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
 }
 .composer-footer > span:first-child {
@@ -1152,7 +1152,7 @@ textarea {
   color: var(--elevated);
 }
 .composer-footer kbd {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
 }
 .image-attachments {
@@ -1177,7 +1177,7 @@ textarea {
   border-radius: 3px;
 }
 .image-attachments span {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1188,7 +1188,7 @@ textarea {
   padding: 3px;
 }
 .readonly-note {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   line-height: 1.5;
   padding: 9px 12px;
   border-radius: 7px;
@@ -1209,7 +1209,7 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   letter-spacing: 1.3px;
   color: var(--faint);
   height: 64px;
@@ -1236,14 +1236,14 @@ textarea {
 }
 .workspace-preview > b {
   display: block;
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   font-weight: 500;
   color: var(--text);
   margin-bottom: 7px;
 }
 .workspace-preview > small {
   display: block;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   line-height: 1.8;
   color: var(--faint);
   max-width: 185px;
@@ -1253,7 +1253,7 @@ textarea {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
   background: color-mix(in srgb, var(--text) 1.6%, transparent);
   border-radius: 5px;
@@ -1265,7 +1265,7 @@ textarea {
   padding: 22px 0;
 }
 .inspector-section h3 {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   font-weight: 450;
   color: var(--mint);
   display: flex;
@@ -1281,11 +1281,11 @@ textarea {
   margin-left: auto;
 }
 .inspector-section h3 > span {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
 }
 .inspector-section p {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   line-height: 1.9;
   color: var(--faint);
   margin: 10px 0 0;
@@ -1300,11 +1300,11 @@ textarea {
   padding: 10px 12px;
   border-radius: 7px;
   color: var(--mint);
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
 }
 .permission-select select {
   width: 100%;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
 }
 .usage-unavailable {
   border: 1px dashed color-mix(in srgb, var(--text) 5.1%, transparent);
@@ -1313,12 +1313,12 @@ textarea {
   color: var(--faint);
 }
 .usage-unavailable span {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   display: block;
 }
 .usage-unavailable small {
   display: block;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   line-height: 1.8;
   margin-top: 5px;
   color: var(--faint);
@@ -1329,7 +1329,7 @@ textarea {
 .usage-meter > div:first-child {
   display: flex;
   justify-content: space-between;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
 }
 .usage-meter b {
@@ -1350,7 +1350,7 @@ textarea {
 }
 .usage-meter small,
 .usage-asof {
-  font-size: 7px;
+  font-size: calc(var(--ui-size, 11px) * 0.63636);
   color: var(--faint);
 }
 .skill-row {
@@ -1389,18 +1389,18 @@ textarea {
   height: 20px;
 }
 .engine-card b {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   font-weight: 450;
   color: var(--mint);
 }
 .engine-card p {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   line-height: 1.9;
   color: var(--faint);
   margin: 9px 0 11px;
 }
 .engine-card > span {
-  font-size: 7px;
+  font-size: calc(var(--ui-size, 11px) * 0.63636);
   color: var(--faint);
   display: flex;
   align-items: center;
@@ -1425,12 +1425,12 @@ textarea {
   gap: 9px;
   align-items: center;
   color: var(--accent);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
 }
 .request-heading small {
   display: block;
   color: var(--muted);
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   margin-top: 4px;
 }
 .request-actions {
@@ -1441,7 +1441,7 @@ textarea {
   margin-top: 15px;
 }
 .request-actions button {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   padding: 7px 11px;
 }
 .approval-card pre {
@@ -1453,7 +1453,7 @@ textarea {
   padding: 0;
 }
 .question-card legend {
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   line-height: 1.6;
   color: var(--text);
   margin-bottom: 9px;
@@ -1478,11 +1478,11 @@ textarea {
 }
 .question-options b {
   display: block;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .question-options small {
   display: block;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   margin-top: 5px;
   line-height: 1.6;
 }
@@ -1492,7 +1492,7 @@ textarea {
   border-radius: 6px;
   padding: 9px 11px;
   margin-top: 9px;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .error-toast {
   position: fixed;
@@ -1510,11 +1510,11 @@ textarea {
   box-shadow: 0 15px 50px #0005;
 }
 .error-toast b {
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   color: var(--danger);
 }
 .error-toast p {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--danger);
   margin: 5px 0 0;
   line-height: 1.7;
@@ -1563,7 +1563,7 @@ textarea {
 }
 .eyebrow {
   display: block;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   letter-spacing: 1.7px;
   color: var(--muted);
   margin-bottom: 14px;
@@ -1578,7 +1578,7 @@ textarea {
 }
 .modal > p {
   color: var(--faint);
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   line-height: 1.8;
   margin: 0 0 25px;
 }
@@ -1608,13 +1608,13 @@ textarea {
   background: color-mix(in srgb, var(--text) 0.8%, transparent);
 }
 .account-state b {
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   font-weight: 500;
   color: var(--mint);
 }
 .account-state small {
   display: block;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   line-height: 1.7;
   margin-top: 4px;
@@ -1624,7 +1624,7 @@ textarea {
   gap: 8px;
 }
 .modal-note {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
   display: block;
   margin-top: 20px;
@@ -1637,7 +1637,7 @@ textarea {
   padding: 23px;
 }
 .device-login > small {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   letter-spacing: 1.1px;
   color: var(--muted);
 }
@@ -1655,21 +1655,21 @@ textarea {
   justify-content: center;
   align-items: center;
   gap: 6px;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   margin-top: 16px;
 }
 .device-login > .text-button {
   display: block;
   margin: 15px auto 0;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
 }
 .text-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--mint);
   padding: 5px 0;
   text-decoration: underline;
@@ -1691,13 +1691,13 @@ textarea {
   min-width: 0;
 }
 .appearance-settings legend {
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   font-weight: 600;
   padding: 0;
   color: var(--text);
 }
 .appearance-settings > p {
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--muted);
   line-height: 1.7;
   margin: 7px 0 14px;
@@ -1739,13 +1739,13 @@ textarea {
 .theme-choice b,
 .system-theme-choice b {
   display: block;
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   font-weight: 500;
   color: var(--text);
 }
 .theme-choice small {
   display: block;
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--muted);
   line-height: 1.7;
   margin-top: 2px;
@@ -1796,7 +1796,7 @@ textarea {
 }
 .system-theme-choice small {
   display: block;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--muted);
   line-height: 1.7;
   margin-top: 3px;
@@ -1805,13 +1805,13 @@ textarea {
   min-width: 0;
 }
 .setting-row b {
-  font-size: 11px;
+  font-size: calc(var(--ui-size, 11px) * 1);
   color: var(--text);
   font-weight: 500;
 }
 .setting-row small {
   display: block;
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--faint);
   line-height: 1.8;
   margin-top: 5px;
@@ -1827,7 +1827,7 @@ textarea {
   overflow-wrap: anywhere;
 }
 .setting-row button {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   flex-shrink: 0;
   padding: 8px 10px;
 }
@@ -1836,7 +1836,7 @@ textarea {
 }
 .compatibility-note,
 .inline-error {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
   color: var(--accent);
   line-height: 1.7;
   margin-top: 15px;
@@ -1844,7 +1844,7 @@ textarea {
 .runtime-logs {
   margin-top: 20px;
   color: var(--faint);
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
 }
 .runtime-logs pre {
   font:
@@ -1864,7 +1864,7 @@ textarea {
   gap: 15px;
   padding: 12px 0;
   border-bottom: 1px solid color-mix(in srgb, var(--text) 2.7%, transparent);
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--faint);
 }
 .guide-grid code {
@@ -1877,7 +1877,7 @@ textarea {
   border: 1px solid color-mix(in srgb, var(--text) 8.2%, transparent);
   border-radius: 7px;
   padding: 12px;
-  font-size: 12px;
+  font-size: calc(var(--ui-size, 11px) * 1.09091);
   width: 100%;
   margin: 12px 0 20px;
 }
@@ -1979,7 +1979,7 @@ textarea {
   }
   .welcome > p {
     margin: 14px 0;
-    font-size: 10px;
+    font-size: calc(var(--ui-size, 11px) * 0.90909);
   }
   .suggestion-grid {
     margin-top: 23px;
@@ -2015,7 +2015,7 @@ textarea {
     grid-template-columns: 205px minmax(0, 1fr);
   }
   .brand b {
-    font-size: 21px;
+    font-size: calc(var(--ui-size, 11px) * 1.90909);
   }
   .brand b span {
     display: none;
@@ -2031,10 +2031,10 @@ textarea {
     padding: 15px 12px;
   }
   .suggestion-grid b {
-    font-size: 9px;
+    font-size: calc(var(--ui-size, 11px) * 0.81818);
   }
   .suggestion-grid small {
-    font-size: 7px;
+    font-size: calc(var(--ui-size, 11px) * 0.63636);
   }
   .breadcrumb > b {
     max-width: 170px;
@@ -2077,12 +2077,12 @@ textarea {
   height: 49px;
   flex-shrink: 0;
   color: var(--mint);
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   border-bottom: 1px solid color-mix(in srgb, var(--text) 3.1%, transparent);
   margin-bottom: 12px;
 }
 .terminal-toolbar > small {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
   overflow: hidden;
   white-space: nowrap;
@@ -2091,7 +2091,7 @@ textarea {
   margin-left: 8px;
 }
 .terminal-toolbar .text-button {
-  font-size: 9px;
+  font-size: calc(var(--ui-size, 11px) * 0.81818);
 }
 .terminal-canvas {
   flex: 1;
@@ -2107,7 +2107,7 @@ textarea {
   background: var(--bg);
 }
 .terminal-footer {
-  font-size: 8px;
+  font-size: calc(var(--ui-size, 11px) * 0.72727);
   color: var(--faint);
   line-height: 1.7;
   margin-top: 12px;
@@ -2119,7 +2119,7 @@ textarea {
   border: 1px solid color-mix(in srgb, var(--accent) 7.8%, transparent);
   border-radius: 7px;
   padding: 10px 12px;
-  font-size: 10px;
+  font-size: calc(var(--ui-size, 11px) * 0.90909);
   color: var(--muted);
   margin: 7px 0;
 }
