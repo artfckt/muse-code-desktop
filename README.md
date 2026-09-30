@@ -106,7 +106,7 @@ bash scripts/build-windows-vps.sh
 
 The VPS script builds in a temporary staging directory, uses the pinned package's Windows N-API PTY prebuilds, and writes the installer, blockmap and `SHA256SUMS.txt` to `release/`. The Windows workflow independently builds the app and checks the packaged renderer, sandboxed preload and native PTY.
 
-To regenerate the screenshots, start a Vite preview with `npx vite --host 127.0.0.1`, then run `node tests/capture-screenshots.cjs`. Screenshots show the actual beta interface with illustrative conversation and agent data from the test-only bridge; that bridge is not included in production.
+To regenerate the screenshots, run `npm run build:renderer`, start the production preview with `npx vite preview --host 127.0.0.1 --port 5176`, then run `MUSE_PREVIEW_URL=http://127.0.0.1:5176 node tests/capture-screenshots.cjs` (or set that environment variable in PowerShell). Screenshots show the actual beta interface with illustrative conversation and agent data from the test-only bridge; that bridge is not included in production.
 
 ## This release
 

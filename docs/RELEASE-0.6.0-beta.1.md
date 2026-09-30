@@ -36,6 +36,8 @@ This beta fixes the issues documented in the [0.5.0-beta.1 application and UX au
 
 - 30 protocol, authentication, native-host, terminal and desktop boundary tests passed against an isolated Muse CLI where required.
 - 49 UI tests passed, including nine theme/accessibility and responsive layout checks.
+- [Windows validation passed](https://github.com/artfckt/muse-code-desktop/actions/runs/36780873572): typecheck, protocol tests, all 49 UI tests, installer build and packaged renderer/preload/media/native PTY smoke checks. Windows N-API PTY prebuilds used by the VPS installer loaded successfully.
+- The VPS installer was extracted and inspected: x64 application, 154 renderer/native source files matched the tested build byte for byte, three Windows PTY prebuilds matched the pinned package, and the Linux PTY build was absent. Its uploaded SHA-256 matches the local installer.
 - The Electron smoke test passed on the VPS: sandboxed preload, native PTY, media, IPC boundaries and isolated agent storage.
 - A production-renderer benchmark with illustrative histories opened 100 / 500 / 2,000 messages in 221 / 271 / 268 ms on the test VPS. The 2,000-message case rendered 200 entries, handled typing in 30 ms and a batch of 30 stream deltas in 32 ms, without page errors. These are synthetic measurements, not guarantees for every machine.
 - Updated screenshots use the real production renderer with clearly illustrative test data.
