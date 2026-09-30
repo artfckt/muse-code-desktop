@@ -1368,3 +1368,190 @@ body {
   display: block;
   margin: 5px 0;
 }
+/* Accessible compact beta layout. Keep readable metadata at every UI scale. */
+.app-shell {
+  grid-template-columns: min(var(--left-width, 232px), 34vw) 5px minmax(0, 1fr);
+}
+.app-shell:has(.inspector) {
+  grid-template-columns: min(
+      var(--left-width, 232px),
+      calc((100vw - 510px) * 0.48)
+    ) 5px minmax(500px, 1fr) 5px min(
+      var(--right-width, 248px),
+      calc((100vw - 510px) * 0.52)
+    );
+}
+.main-panel {
+  min-width: 0;
+}
+.conversation-tabs {
+  height: auto;
+  min-height: 42px;
+  flex-wrap: wrap;
+  gap: 1px;
+  padding-block: 3px;
+}
+.conversation-tabs > button {
+  min-height: 34px;
+  flex-shrink: 0;
+  white-space: nowrap;
+  padding-inline: 8px;
+}
+.composer-toolbar,
+.composer-left {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.composer-left {
+  row-gap: 7px;
+}
+.workspace-collapse {
+  min-width: 28px;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+}
+.icon-button {
+  min-width: 28px;
+  min-height: 28px;
+}
+:root[data-density="compact"] .session-row {
+  min-height: 32px;
+  padding-block: 5px;
+}
+.session-row small,
+:root[data-density="compact"] .session-row small {
+  font-size: max(11px, calc(var(--ui-size) * 0.85));
+  opacity: 1;
+  color: var(--muted);
+}
+.session-row.active b {
+  color: var(--text);
+}
+.workspace-name small {
+  font-size: max(11px, calc(var(--ui-size) * 0.85));
+  color: var(--muted);
+}
+.code-toolbar {
+  color: var(--muted);
+  font-size: 11px;
+  background: var(--panel);
+}
+.accessible-modal {
+  color: var(--text);
+  margin: auto;
+}
+.accessible-modal::backdrop {
+  background: #0009;
+  backdrop-filter: blur(6px);
+}
+.user-message {
+  position: relative;
+}
+.copy-user-message {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  opacity: 0;
+}
+.user-message:hover .copy-user-message,
+.copy-user-message:focus-visible {
+  opacity: 1;
+}
+.user-message > div {
+  padding-right: 20px;
+}
+.connection-onboarding {
+  margin: 20px;
+  padding: 18px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 12px;
+}
+.connection-onboarding p {
+  color: var(--muted);
+  line-height: 1.6;
+}
+.connection-onboarding button {
+  margin-right: 12px;
+}
+.media-unavailable {
+  display: block;
+  padding: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.agent-window {
+  position: relative;
+}
+.agent-window .jump-latest {
+  bottom: 22px;
+}
+.session-row-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.session-row-wrap > .session-row {
+  padding-right: 27px;
+}
+.session-more {
+  position: absolute;
+  right: 0;
+  opacity: 0;
+}
+.session-row-wrap:hover .session-more,
+.session-more:focus-visible {
+  opacity: 1;
+}
+.conversation-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 20px;
+}
+.archive-toggle {
+  width: 100%;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+}
+@media (max-width: 950px) {
+  .app-shell:has(.inspector) {
+    grid-template-columns: 190px 5px minmax(0, 1fr);
+  }
+  .inspector {
+    display: flex;
+    position: absolute;
+    z-index: 50;
+    right: 0;
+    top: 42px;
+    bottom: 0;
+    width: min(300px, 40vw);
+    background: var(--panel);
+    box-shadow: -15px 0 30px #0005;
+  }
+  .main-panel + .resize-handle {
+    display: none;
+  }
+  .topbar {
+    padding-inline: 12px;
+  }
+  .window-caption {
+    display: none;
+  }
+}
+
+.attachment-storage {
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.attachment-storage h3 {
+  color: var(--text);
+}
+.attachment-storage small {
+  display: block;
+  margin-top: 8px;
+}

@@ -45,6 +45,18 @@ window.testBridge = {
   },
 };
 window.muse = {
+  agentAppearance: async () => null,
+  syncAppearance: async () => ({}),
+  onAppearance: () => () => {},
+  resolveMedia: async (file) =>
+    `muse-media://local/?path=${encodeURIComponent(file)}`,
+  discardAttachment: async (id) =>
+    window.testBridge.calls.push(["discardAttachment", id]),
+  purgeAttachments: async () => ({ removed: 0 }),
+  storageStats: async () => ({ files: 0, bytes: 0 }),
+  forgetWorkspace: async () => ({ workspaces: [] }),
+  exportSession: async (id) =>
+    window.testBridge.calls.push(["exportSession", id]),
   systemFonts: async () => ["Aptos", "Cascadia Code", "Segoe UI"],
   pickWorkspace: async () => "/projects/new-project",
   agentAvailable: async () => true,

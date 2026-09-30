@@ -22,5 +22,6 @@ cd "$stage/source"
 TMPDIR="$stage/tmp" PATH="$stage/bin:$PATH" WINEPREFIX="$stage/wine" WINEDEBUG=-all xvfb-run -a npx electron-builder --win nsis --x64 --publish never -c.npmRebuild=false
 cp release/*.exe release/*.exe.blockmap "$repo_root/release/"
 cd "$repo_root/release"
-sha256sum Muse-Desktop-*-Windows-x64.exe > SHA256SUMS.txt
+build_version="$(node -p "require('$repo_root/package.json').version")"
+sha256sum "Muse-Desktop-${build_version}-Windows-x64.exe" > SHA256SUMS.txt
 printf 'Windows installer and SHA256SUMS.txt are in %s/release/\n' "$repo_root"

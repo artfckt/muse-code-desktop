@@ -1,4 +1,11 @@
-import { useEffect, useState } from "react";
+import {
+  memo,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ExternalLink,
   Users,
@@ -66,7 +73,29 @@ export function ResizeHandle({
     />
   );
 }
-export function ConversationTimeline({
+const Message = memo(function Message({
+  item,
+  sessionId,
+  workspace,
+  media,
+}: {
+  item: MuseItem;
+  sessionId: string;
+  workspace: string;
+  media?: any[];
+}) {
+  const enriched = useMemo(
+    () => ({
+      ...item,
+      sessionId,
+      workspace,
+      desktopMedia: media || item.desktopMedia,
+    }),
+    [item, sessionId, workspace, media],
+  );
+  return <TranscriptItem item={enriched} />;
+});
+export const ConversationTimeline = memo(function ConversationTimeline({
   items,
   sessionId,
   workspace,
@@ -81,9 +110,21 @@ export function ConversationTimeline({
   autoCollapse: boolean;
   media: Record<string, any[]>;
 }) {
+  const [limit, setLimit] = useState(200);
+  const anchor = useRef<HTMLDivElement>(null);
+  const previousHeight = useRef<number | null>(null);
+  useEffect(() => setLimit(200), [sessionId]);
+  useLayoutEffect(() => {
+    const scroll = anchor.current?.closest(".chat-scroll");
+    if (scroll && previousHeight.current != null) {
+      scroll.scrollTop += scroll.scrollHeight - previousHeight.current;
+      previousHeight.current = null;
+    }
+  }, [limit]);
+  const visible = items.length > limit ? items.slice(-limit) : items;
   const groups: { message?: MuseItem; activity?: MuseItem[]; key: string }[] =
     [];
-  for (const item of items.filter((i) => !i.retracted)) {
+  for (const item of visible.filter((i) => !i.retracted)) {
     if (["userMessage", "agentMessage"].includes(item.kind))
       groups.push({ message: item, key: item.itemId });
     else if (groups.at(-1)?.activity) groups.at(-1)!.activity!.push(item);
@@ -91,17 +132,27 @@ export function ConversationTimeline({
   }
   return (
     <>
+      <div ref={anchor} />
+      {items.length > limit ? (
+        <button
+          className="text-button load-earlier"
+          onClick={() => {
+            previousHeight.current =
+              anchor.current?.closest(".chat-scroll")?.scrollHeight || null;
+            setLimit((current) => current + 200);
+          }}
+        >
+          Show earlier messages ({items.length - limit} remaining)
+        </button>
+      ) : null}
       {groups.map((group, index) =>
         group.message ? (
-          <TranscriptItem
+          <Message
             key={group.key}
-            item={{
-              ...group.message,
-              sessionId,
-              workspace,
-              desktopMedia:
-                media[group.message.commandId] || group.message.desktopMedia,
-            }}
+            item={group.message}
+            sessionId={sessionId}
+            workspace={workspace}
+            media={media[group.message.commandId]}
           />
         ) : (
           <ActivityGroup
@@ -121,7 +172,7 @@ export function ConversationTimeline({
       )}
     </>
   );
-}
+});
 function ActivityGroup({
   items,
   sessionId,
@@ -227,7 +278,12 @@ export function SessionDetails({
         ? `${(stats.durationMs / 1000).toFixed(1)}s`
         : undefined,
     ],
-    ["Last activity", session?.lastActivityAt || session?.updatedAt],
+    [
+      "Last activity",
+      session?.lastActivityAt || session?.updatedAt
+        ? new Date(session.lastActivityAt || session.updatedAt).toLocaleString()
+        : undefined,
+    ],
   ].filter(([, value]) => value != null && value !== "");
   return (
     <section className="session-details">
@@ -236,7 +292,20 @@ export function SessionDetails({
         {rows.map(([label, value]) => (
           <div key={String(label)}>
             <dt>{label}</dt>
-            <dd title={String(value)}>{String(value)}</dd>
+            <dd title={String(value)}>
+              {String(value)}
+              {label === "Session" ? (
+                <button
+                  className="text-button"
+                  aria-label="Copy session ID"
+                  onClick={() =>
+                    void navigator.clipboard.writeText(String(value))
+                  }
+                >
+                  Copy
+                </button>
+              ) : null}
+            </dd>
           </div>
         ))}
       </dl>

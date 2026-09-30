@@ -18,8 +18,16 @@ class DesktopEngine {
     this.binary = options.binary;
     this.sessions = new Map();
     this.owners = new Map();
+    this.parents = new Map();
+    this.sessionRoots = new Map();
     this.policies = { ...(options.policies || {}) };
     this.latestUsage = null;
+    this.usageEpoch = 0;
+    this.accountIdentity = null;
+    this.resuming = new Map();
+    this.pinned = new Set();
+    this.selectedSession = null;
+    this.pruning = null;
     this.makeHost = options.hostFactory || ((options) => new MuseHost(options));
     this.control = this.makeHost({
       ...options,
@@ -30,7 +38,13 @@ class DesktopEngine {
     if (
       channel === "muse:event" &&
       payload?.method === "usage/changed" &&
-      payload.params?.observedAtMs
+      !(payload.params?.observedAtMs > this.usageEpoch)
+    )
+      return;
+    if (
+      channel === "muse:event" &&
+      payload?.method === "usage/changed" &&
+      payload.params?.observedAtMs > this.usageEpoch
     ) {
       if (
         !this.latestUsage ||
@@ -38,14 +52,117 @@ class DesktopEngine {
       )
         this.latestUsage = payload.params;
     }
+    if (channel === "muse:event" && payload?.method === "account/changed") {
+      const identity = JSON.stringify([
+        payload.params?.state,
+        payload.params?.label,
+      ]);
+      if (this.accountIdentity !== null && this.accountIdentity !== identity)
+        this.invalidateUsage();
+      this.accountIdentity = identity;
+    }
     if (
       channel === "muse:event" &&
-      ((payload?.method === "account/loginCompleted" &&
-        payload.params?.outcome === "granted") ||
-        payload?.method === "account/changed")
+      payload?.method === "account/loginCompleted" &&
+      payload.params?.outcome === "granted"
     )
-      this.latestUsage = null;
+      this.invalidateUsage();
     this.options.emit?.(channel, payload);
+  }
+  invalidateUsage() {
+    this.latestUsage = null;
+    this.usageEpoch = Date.now();
+  }
+  isDescendant(child, parent) {
+    const seen = new Set();
+    while (child && !seen.has(child)) {
+      seen.add(child);
+      child = this.parents.get(child);
+      if (child === parent) return true;
+    }
+    return false;
+  }
+  pinSession(id) {
+    this.pinned.add(id);
+  }
+  unpinSession(id) {
+    this.pinned.delete(id);
+  }
+  async workspaceForSession(id) {
+    const host = this.hostFor(id);
+    let root = this.sessionRoots.get(id) || this.sessions.get(id)?.workspace;
+    if (!root) {
+      const result = await (host || this.control).query("session/read", {
+        sessionId: id,
+        excludeItems: true,
+      });
+      root = result.session?.workspaceRoot;
+    }
+    if (!root || !fs.statSync(root).isDirectory())
+      throw new Error("The conversation folder is unavailable.");
+    this.sessionRoots.set(id, root);
+    return root;
+  }
+  async pruneIdleHosts() {
+    if (this.pruning) return this.pruning;
+    this.pruning = (async () => {
+      const unique = [...new Set(this.sessions.values())];
+      const limit = this.options.maxIdleHosts || 6;
+      let remaining = unique.length;
+      for (const host of unique.sort(
+        (a, b) => (a.lastUsed || 0) - (b.lastUsed || 0),
+      )) {
+        if (remaining < limit) break;
+        const ids = [...this.sessions]
+          .filter(([, value]) => value === host)
+          .map(([id]) => id);
+        if (
+          ids.includes(this.selectedSession) ||
+          [...this.pinned].some((id) => this.hostFor(id) === host) ||
+          host.inFlight
+        )
+          continue;
+        let idle = true;
+        for (const id of ids) {
+          try {
+            const snapshot = await host.query("session/read", {
+              sessionId: id,
+              excludeItems: false,
+            });
+            const items =
+              snapshot.history?.items ||
+              snapshot.history?.snapshot?.state?.items ||
+              [];
+            const pending = await host.query("approval/listPending", {
+              sessionId: id,
+            });
+            if (
+              snapshot.session?.activeTurnId ||
+              snapshot.history?.snapshot?.state?.activeTurn ||
+              items.some(
+                (item) =>
+                  ["subagent", "workflow", "userShell"].includes(item.kind) &&
+                  item.status === "inProgress",
+              ) ||
+              pending.approvals?.length ||
+              pending.userInputs?.length
+            )
+              idle = false;
+          } catch {
+            idle = false;
+          }
+        }
+        if (!idle) continue;
+        await host.close();
+        remaining--;
+        for (const id of ids) this.sessions.delete(id);
+        for (const [child, owner] of this.owners)
+          if (ids.includes(owner)) this.owners.delete(child);
+      }
+    })().finally(() => {
+      this.pruning = null;
+    });
+    return this.pruning;
   }
   get home() {
     return this.control.home;
@@ -79,8 +196,13 @@ class DesktopEngine {
       args: profiles[profile],
       emit: (channel, payload) => {
         const item = payload?.params?.item;
-        if (item?.childSessionId && owner)
+        if (item?.childSessionId && owner) {
           this.owners.set(item.childSessionId, owner);
+          this.parents.set(
+            item.childSessionId,
+            payload.params?.sessionId || owner,
+          );
+        }
         this.publish(
           channel,
           channel === "muse:host-exit"
@@ -102,14 +224,18 @@ class DesktopEngine {
     for (const item of result?.history?.items ||
       result?.history?.snapshot?.state?.items ||
       []) {
-      if (item.childSessionId)
+      if (item.childSessionId) {
         this.owners.set(item.childSessionId, this.owners.get(parent) || parent);
+        this.parents.set(item.childSessionId, parent);
+      }
       for (const child of item.children || [])
-        if (child.childSessionId)
+        if (child.childSessionId) {
           this.owners.set(
             child.childSessionId,
             this.owners.get(parent) || parent,
           );
+          this.parents.set(child.childSessionId, parent);
+        }
     }
   }
   async query(method, params = {}) {
@@ -118,33 +244,45 @@ class DesktopEngine {
       method,
       params,
     );
+    if (result.session?.workspaceRoot)
+      this.sessionRoots.set(
+        result.session.sessionId || params.sessionId,
+        result.session.workspaceRoot,
+      );
     this.registerChildren(result, params.sessionId);
     return result.session
       ? { ...result, session: this.projectSession(result.session) }
       : result;
   }
   async command(method, params = {}) {
+    if (method === "session/resume") {
+      this.selectedSession = params.sessionId;
+      if (this.resuming.has(params.sessionId))
+        return this.resuming.get(params.sessionId);
+    }
     if (method === "session/resume" && !this.hostFor(params.sessionId)) {
-      const host = this.newHost(this.policies[params.sessionId] || "standard");
-      host.setOwner(params.sessionId);
+      const request = this.resumeNewHost(params);
+      this.resuming.set(params.sessionId, request);
       try {
-        const result = await host.command(method, params);
-        this.sessions.set(params.sessionId, host);
-        this.registerChildren(result, params.sessionId);
-        return {
-          ...result,
-          session: result.session
-            ? this.projectSession(result.session)
-            : result.session,
-          permissionProfile: host.profile,
-        };
-      } catch (error) {
-        await host.close();
-        throw error;
+        return await request;
+      } finally {
+        this.resuming.delete(params.sessionId);
       }
     }
     const host = this.hostFor(params.sessionId) || this.control;
-    const result = await host.command(method, params);
+    host.lastUsed = Date.now();
+    host.inFlight = (host.inFlight || 0) + 1;
+    let result;
+    try {
+      result = await host.command(method, params);
+    } finally {
+      host.inFlight--;
+    }
+    if (result.session?.workspaceRoot)
+      this.sessionRoots.set(
+        result.session.sessionId || params.sessionId,
+        result.session.workspaceRoot,
+      );
     this.registerChildren(
       result,
       result.session?.sessionId || params.sessionId,
@@ -164,7 +302,32 @@ class DesktopEngine {
         }
       : result;
   }
+  async resumeNewHost(params) {
+    await this.pruneIdleHosts();
+    const host = this.newHost(this.policies[params.sessionId] || "standard");
+    host.setOwner(params.sessionId);
+    try {
+      const result = await host.command("session/resume", params);
+      host.lastUsed = Date.now();
+      host.workspace = result.session?.workspaceRoot || host.workspace;
+      if (host.workspace)
+        this.sessionRoots.set(params.sessionId, host.workspace);
+      this.sessions.set(params.sessionId, host);
+      this.registerChildren(result, params.sessionId);
+      return {
+        ...result,
+        session: result.session
+          ? this.projectSession(result.session)
+          : result.session,
+        permissionProfile: host.profile,
+      };
+    } catch (error) {
+      await host.close();
+      throw error;
+    }
+  }
   async startSession(options = {}) {
+    await this.pruneIdleHosts();
     const profile = options.permissionProfile || "standard";
     const host = this.newHost(profile);
     if (options.noFolder) {
@@ -179,6 +342,10 @@ class DesktopEngine {
         approvalMode: profile === "yolo" ? "allowAll" : options.approvalMode,
       });
       host.setOwner(result.sessionId);
+      if (host.workspace)
+        this.sessionRoots.set(result.sessionId, host.workspace);
+      host.lastUsed = Date.now();
+      this.selectedSession = result.sessionId;
       this.sessions.set(result.sessionId, host);
       this.policies[result.sessionId] = profile;
       this.options.savePolicies?.(this.policies);
@@ -199,7 +366,13 @@ class DesktopEngine {
     const host = this.hostFor(payload.sessionId);
     if (!host)
       throw new Error("Resume the conversation before sending a message.");
-    return host.sendTurn(payload);
+    host.lastUsed = Date.now();
+    host.inFlight = (host.inFlight || 0) + 1;
+    try {
+      return await host.sendTurn(payload);
+    } finally {
+      host.inFlight--;
+    }
   }
   async setPermissions(id, profile, mode) {
     if (!profiles[profile]) throw new Error("Unknown permission profile.");
@@ -291,14 +464,17 @@ class DesktopEngine {
     return noFolder ? { ...row, workspaceRoot: "", noFolder: true } : row;
   }
   async readUsage() {
+    const epoch = this.usageEpoch;
     const hosts = [...new Set([...this.sessions.values(), this.control])];
     const results = await Promise.allSettled(
       hosts.map((host) => host.query("usage/read", {})),
     );
+    if (epoch !== this.usageEpoch)
+      return { checkedAtMs: Date.now(), sourceCount: hosts.length };
     for (const result of results) {
       const usage = result.status === "fulfilled" && result.value?.usage;
       if (
-        usage?.observedAtMs &&
+        usage?.observedAtMs > this.usageEpoch &&
         (!this.latestUsage ||
           usage.observedAtMs >= this.latestUsage.observedAtMs)
       )
@@ -320,6 +496,8 @@ class DesktopEngine {
     );
     this.sessions.clear();
     this.owners.clear();
+    this.parents.clear();
+    this.sessionRoots.clear();
   }
   async setBinary(binary) {
     await this.close();

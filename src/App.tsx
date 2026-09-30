@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   Check,
   ChevronDown,
+  MoreHorizontal,
   ChevronsUpDown,
   CircleStop,
   Code2,
@@ -40,6 +41,8 @@ import {
   Zap,
   Users,
 } from "lucide-react";
+import { useDrafts } from "./useDrafts";
+import { Modal } from "./Modal";
 import { Select } from "./Select";
 import { NewConversation } from "./NewConversation";
 import { version as appVersion } from "../package.json";
@@ -49,7 +52,8 @@ import {
   savePreferences,
   applyPreferences,
 } from "./desktop-preferences";
-import { prepareAttachment, type Attachment } from "./media";
+import { SafeMedia } from "./RichContent";
+import { prepareAttachment, attachmentContext, type Attachment } from "./media";
 import {
   ResizeHandle,
   ConversationTimeline,
@@ -81,6 +85,8 @@ import {
 const NativeTerminal = lazy(() => import("./NativeTerminal"));
 import { AgentWindow } from "./AgentWindow";
 
+const EMPTY_MEDIA: Record<string, any[]> = {};
+const modifier = /Mac/i.test(navigator.platform) ? "⌘" : "Ctrl";
 const efforts = [
   "default",
   "none",
@@ -159,6 +165,14 @@ function DesktopApp() {
   );
   const theme = resolveTheme(themePreference, systemDark);
   useEffect(() => {
+    const warn = () =>
+      setError(
+        "Draft persistence is unavailable. Keep this window open and retry saving before closing the app.",
+      );
+    window.addEventListener("muse-draft-storage-error", warn);
+    return () => window.removeEventListener("muse-draft-storage-error", warn);
+  }, []);
+  useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     const update = () => setSystemDark(media.matches);
     media.addEventListener("change", update);
@@ -170,6 +184,9 @@ function DesktopApp() {
     applyPreferences(preferences);
     savePreferences(preferences);
     saveThemePreference(themePreference);
+    void window.muse
+      ?.syncAppearance?.({ themePreference, preferences })
+      .catch(() => {});
     void window.muse
       ?.setWindowTheme?.({
         background: /^#[a-f0-9]{6}$/i.test(preferences.colors.bg || "")
@@ -195,6 +212,33 @@ function DesktopApp() {
   );
   const [workspaces, setWorkspaces] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [hiddenHistory, setHiddenHistory] = useState<{
+    chats: string[];
+    roots: string[];
+  }>(() => {
+    try {
+      const saved = JSON.parse(
+        localStorage.getItem("muse-hidden-history") || "{}",
+      );
+      return {
+        chats: Array.isArray(saved.chats) ? saved.chats : [],
+        roots: Array.isArray(saved.roots) ? saved.roots : [],
+      };
+    } catch {
+      return { chats: [], roots: [] };
+    }
+  });
+  const [showArchived, setShowArchived] = useState(false);
+  const [conversationMenu, setConversationMenu] = useState<any>(null);
+  const [renameTarget, setRenameTarget] = useState("");
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        "muse-hidden-history",
+        JSON.stringify(hiddenHistory),
+      );
+    } catch {}
+  }, [hiddenHistory]);
   const [completed, setCompleted] = useState<Record<string, string>>({});
   const [sessionStats, setSessionStats] = useState<Record<string, any>>({});
   const [media, setMedia] = useState<Record<string, Record<string, any[]>>>({});
@@ -205,6 +249,8 @@ function DesktopApp() {
   const [usage, setUsage] = useState<any>(null);
   const [usageLoading, setUsageLoading] = useState(false);
   const [usageChecked, setUsageChecked] = useState<number | null>(null);
+  const accountIdentity = useRef<string | null>(null);
+  const usageEpoch = useRef(0);
   const [usageError, setUsageError] = useState("");
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -218,8 +264,10 @@ function DesktopApp() {
     userInputs: any[];
   }>({ approvals: [], userInputs: [] });
   const [skills, setSkills] = useState<any[]>([]);
-  const [prompt, setPrompt] = useState("");
-  const [images, setImages] = useState<Attachment[]>([]);
+  const drafts = useDrafts();
+  const { prompt, setPrompt, images, setImages } = drafts;
+  const [bootAttempt, setBootAttempt] = useState(0);
+  const [historyError, setHistoryError] = useState("");
   const [turns, setTurns] = useState<Record<string, string | null>>({});
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("Connecting to Muse Code…");
@@ -229,7 +277,7 @@ function DesktopApp() {
   >(null);
   const [login, setLogin] = useState<any>(null);
   const [loginBusy, setLoginBusy] = useState(false);
-  const [inspector, setInspector] = useState(true);
+  const [inspector, setInspector] = useState(() => innerWidth > 950);
   const [tab, setTab] = useState<
     "conversation" | "activity" | "terminal" | "agents"
   >("conversation");
@@ -240,6 +288,7 @@ function DesktopApp() {
   }
   const [search, setSearch] = useState("");
   const [rename, setRename] = useState("");
+  const [storage, setStorage] = useState<any>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [readOnly, setReadOnly] = useState(false);
@@ -248,7 +297,13 @@ function DesktopApp() {
   const stores = useRef(new Map<string, Transcript>());
   const sessionsRequest = useRef<Promise<void> | null>(null);
   const sessionsRefreshAgain = useRef(false);
-  const buffering = useRef<MuseEvent[] | null>(null);
+  const buffering = useRef(new Map<string, MuseEvent[]>());
+  const loadGeneration = useRef(0);
+  const usageGeneration = useRef(0);
+  const scrollPositions = useRef(
+    new Map<string, { top: number; follow: boolean }>(),
+  );
+  const restoreScroll = useRef<{ top: number; follow: boolean } | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -279,7 +334,11 @@ function DesktopApp() {
       workspace,
       ...sessions.map((row) => row.workspaceRoot || ""),
     ]),
-  ].filter((root) => root || sessions.some((row) => !row.workspaceRoot));
+  ].filter(
+    (root) =>
+      (search || showArchived || !hiddenHistory.roots.includes(root)) &&
+      (root || sessions.some((row) => !row.workspaceRoot)),
+  );
   const account = diagnostic?.account;
   const signedIn = account?.state === "accountLogin";
   const accountName = signedIn
@@ -299,6 +358,10 @@ function DesktopApp() {
   const refreshAccount = useCallback(async () => {
     const result = await window.muse.diagnose();
     setDiagnostic(result);
+    accountIdentity.current = JSON.stringify([
+      result.account?.state,
+      result.account?.label,
+    ]);
     if (result.error) setStatus("Muse needs attention");
     else
       setStatus(
@@ -350,16 +413,26 @@ function DesktopApp() {
       });
   }, []);
   const refreshUsage = useCallback(async () => {
+    const generation = ++usageGeneration.current;
     setUsageLoading(true);
     setUsageError("");
     try {
       const raw = await window.muse.usage();
-      setUsage(subscriptionUsage(raw));
+      if (generation !== usageGeneration.current) return;
+      const next = subscriptionUsage(raw);
+      setUsage((previous: any) =>
+        next && next.observedAtMs <= usageEpoch.current
+          ? null
+          : !next || !previous || next.observedAtMs >= previous.observedAtMs
+            ? next
+            : previous,
+      );
       setUsageChecked(raw.checkedAtMs || Date.now());
     } catch (error: any) {
-      setUsageError(error.message || "Cannot read Muse usage.");
+      if (generation === usageGeneration.current)
+        setUsageError(error.message || "Cannot read Muse usage.");
     } finally {
-      setUsageLoading(false);
+      if (generation === usageGeneration.current) setUsageLoading(false);
     }
   }, []);
   async function run(action: () => Promise<any>) {
@@ -374,10 +447,18 @@ function DesktopApp() {
       setBusy(false);
     }
   }
-  function selectSession(id: string) {
+  function selectSession(id: string, moveDraft = false) {
+    if (scrollRef.current && activeRef.current)
+      scrollPositions.current.set(activeRef.current, {
+        top: scrollRef.current.scrollTop,
+        follow: followRef.current,
+      });
+    drafts.select(id || `new:${workspaceRef.current}`, moveDraft);
     activeRef.current = id;
-    followRef.current = true;
-    setShowLatest(false);
+    const saved = scrollPositions.current.get(id) || { top: 0, follow: true };
+    restoreScroll.current = saved;
+    followRef.current = saved.follow;
+    setShowLatest(!saved.follow);
     setSession(id);
     setReadOnly(false);
     setNextCursor(null);
@@ -394,8 +475,6 @@ function DesktopApp() {
     setItems([]);
     setPending({ approvals: [], userInputs: [] });
     setSkills([]);
-    setPrompt("");
-    setImages([]);
     setPermissionProfile(preferencesRef.current.defaultPermissions);
     setApprovalMode("");
     setReasoning(preferencesRef.current.defaultReasoning);
@@ -451,7 +530,7 @@ function DesktopApp() {
         { ...result.raw.session, permissionProfile: profile },
         ...prev.filter((row) => row.sessionId !== id),
       ]);
-    selectSession(id);
+    selectSession(id, !options.fresh);
     storeFor(id).seed([]);
     setItems([]);
     setPending({ approvals: [], userInputs: [] });
@@ -464,113 +543,108 @@ function DesktopApp() {
     return id;
   }
   async function loadSession(id: string) {
+    const generation = ++loadGeneration.current;
+    const row = sessions.find((entry) => entry.sessionId === id);
+    workspaceRef.current = row?.workspaceRoot || "";
+    selectSession(id);
+    setWorkspace(workspaceRef.current);
     setMessagesLoading(true);
+    setError("");
     setTab("conversation");
+    setItems([]);
+    setSkills([]);
+    setPending({ approvals: [], userInputs: [] });
+    buffering.current.set(id, []);
+    const current = () =>
+      generation === loadGeneration.current && activeRef.current === id;
     try {
-      await run(async () => {
-        const previousId = activeRef.current;
-        const previousWorkspace = workspaceRef.current;
-        const row = sessions.find((row) => row.sessionId === id);
-        if (row?.workspaceRoot && row.workspaceRoot !== workspaceRef.current) {
-          await window.muse.connectWorkspace(row.workspaceRoot);
-          workspaceRef.current = row.workspaceRoot;
-          setWorkspace(row.workspaceRoot);
-        }
-        workspaceRef.current = row?.workspaceRoot || "";
-        setWorkspace(row?.workspaceRoot || "");
-        selectSession(id);
-        buffering.current = [];
-        setItems([]);
-        setPending({ approvals: [], userInputs: [] });
-        setSkills([]);
-        try {
-          let result;
-          try {
-            result = await window.muse.resumeSession(id);
-          } catch (err: any) {
-            if (/sessionInUse|in use|lease/i.test(err.message)) {
-              result = await window.muse.readSession(id);
-              setReadOnly(true);
-              setStatus(
-                "This session is open in another Muse window. Close it there to continue here.",
-              );
-            } else throw err;
-          }
-          const history = historyItems(result);
-          const store = storeFor(id);
-          if (history) store.seed(history);
-          else {
-            const page = await window.muse.viewPage(id);
-            store.seed([]);
-            page.events?.forEach((event: MuseEvent) => store.apply(event));
-            setNextCursor(page.nextCursor);
-          }
-          for (const event of buffering.current || []) store.apply(event);
-          buffering.current = null;
-          setItems(store.list());
-          setMessagesLoading(false);
-          void window.muse
-            .sessionMedia(id)
-            .then((savedMedia) =>
-              setMedia((prev) => ({ ...prev, [id]: savedMedia })),
-            )
-            .catch((error) => setError(error.message));
-          setPermissionProfile(
-            result.permissionProfile || row?.permissionProfile || "standard",
-          );
-          if (result.session) {
-            workspaceRef.current = result.session.workspaceRoot || "";
-            setWorkspace(result.session.workspaceRoot || "");
-          }
-          setModelId(result.session?.modelId || "");
-          const snapshot = result.history?.snapshot?.state;
-          if (snapshot)
-            setSessionStats((prev) => ({
-              ...prev,
-              [id]: {
-                ...prev[id],
-                contextUsage: snapshot.contextUsage,
-                tokenUsage: snapshot.tokenUsage
-                  ? { cumulative: snapshot.tokenUsage }
-                  : prev[id]?.tokenUsage,
-                goal: snapshot.goal,
-                todoList: snapshot.todoList,
-              },
-            }));
-          setApprovalMode(
-            result.session?.approvalMode?.mode ||
-              snapshot?.approvalMode?.mode ||
-              "",
-          );
-          setReasoning(snapshot?.reasoningEffort?.reasoningEffort || "default");
-          setTurns((prev) => ({
-            ...prev,
-            [id]:
-              result.session?.activeTurnId ||
-              snapshot?.activeTurn?.turnId ||
-              null,
-          }));
-          void Promise.allSettled([
-            refreshPending(),
-            window.muse.listModels(id).then((raw) => {
-              if (activeRef.current === id) setModels(raw.models || []);
-            }),
-            window.muse.listSkills(id).then((raw) => {
-              if (activeRef.current === id) setSkills(raw.skills || []);
-            }),
-            refreshUsage(),
-          ]);
-        } catch (err) {
-          buffering.current = null;
-          selectSession(previousId);
-          workspaceRef.current = previousWorkspace;
-          setWorkspace(previousWorkspace);
-          setItems(stores.current.get(previousId)?.list() || []);
-          throw err;
-        }
-      });
+      let result,
+        readonly = false;
+      try {
+        result = await window.muse.resumeSession(id);
+      } catch (error: any) {
+        if (!/sessionInUse|in use|lease/i.test(error.message)) throw error;
+        result = await window.muse.readSession(id);
+        readonly = true;
+      }
+      if (!current()) return;
+      const store = storeFor(id);
+      const history = historyItems(result);
+      if (history) store.seed(history);
+      else {
+        const page = await window.muse.viewPage(id);
+        if (!current()) return;
+        store.seed([]);
+        page.events?.forEach((event: MuseEvent) => store.apply(event));
+        setNextCursor(page.nextCursor);
+      }
+      for (const event of buffering.current.get(id) || []) store.apply(event);
+      buffering.current.delete(id);
+      setItems(store.list());
+      setReadOnly(readonly);
+      if (readonly)
+        setStatus(
+          "This session is open in another Muse window. Close it there to continue here.",
+        );
+      const root = result.session?.workspaceRoot || row?.workspaceRoot || "";
+      workspaceRef.current = root;
+      setWorkspace(root);
+      setPermissionProfile(
+        result.permissionProfile || row?.permissionProfile || "standard",
+      );
+      setModelId(result.session?.modelId || "");
+      const snapshot = result.history?.snapshot?.state;
+      if (snapshot)
+        setSessionStats((previous) => ({
+          ...previous,
+          [id]: {
+            ...previous[id],
+            contextUsage: snapshot.contextUsage,
+            tokenUsage: snapshot.tokenUsage
+              ? { cumulative: snapshot.tokenUsage }
+              : previous[id]?.tokenUsage,
+            goal: snapshot.goal,
+            todoList: snapshot.todoList,
+          },
+        }));
+      setApprovalMode(
+        result.session?.approvalMode?.mode ||
+          snapshot?.approvalMode?.mode ||
+          "",
+      );
+      setReasoning(snapshot?.reasoningEffort?.reasoningEffort || "default");
+      setTurns((previous) => ({
+        ...previous,
+        [id]:
+          result.session?.activeTurnId || snapshot?.activeTurn?.turnId || null,
+      }));
+      void Promise.allSettled([
+        refreshPending(),
+        refreshUsage(),
+        window.muse
+          .sessionMedia(id)
+          .then((saved) =>
+            setMedia((previous) => ({ ...previous, [id]: saved })),
+          ),
+        window.muse.listModels(id).then((raw) => {
+          if (current()) setModels(raw.models || []);
+        }),
+        window.muse.listSkills(id).then((raw) => {
+          if (current()) setSkills(raw.skills || []);
+        }),
+      ]);
+    } catch (error: any) {
+      if (current()) {
+        setError(error.message);
+        setStatus(
+          "Conversation could not be loaded. Select it again to retry.",
+        );
+      }
     } finally {
-      setMessagesLoading(false);
+      if (current()) {
+        buffering.current.delete(id);
+        setMessagesLoading(false);
+      }
     }
   }
   async function openLogin() {
@@ -638,49 +712,59 @@ function DesktopApp() {
     setStatus("Command prepared in Muse CLI. Review it and press Enter there.");
   }
   async function sendPrompt() {
-    if ((!prompt.trim() && !images.length) || busy || uploading || readOnly)
+    if (
+      (!prompt.trim() && !images.length) ||
+      busy ||
+      uploading ||
+      readOnly ||
+      messagesLoading ||
+      !diagnostic?.connected ||
+      !signedIn
+    )
       return;
+    const sent = drafts.capture();
+    const sentImages = sent.images;
     await run(async () => {
-      const text = prompt.trim();
+      const text = sent.text.trim();
       const slash = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
       if (slash) {
         const name = slash[1],
           args = slash[2] || "";
         if (["new", "clear"].includes(name)) {
           await createSession({ fresh: true });
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "login") {
           await openLogin();
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (["status", "usage", "models", "skills", "help"].includes(name)) {
           setModal(name === "help" ? "help" : "settings");
           await refreshAccount();
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "resume") {
           setSearch(args);
-          setPrompt("");
+          drafts.clear(sent);
           setStatus("Choose a session from the sidebar.");
           return;
         }
         if (name === "terminal") {
           openTerminal();
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "stop") {
           if (session) await window.muse.interrupt(session, turns[session]);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "compact") {
           if (session) await window.muse.compact(session);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (
@@ -693,23 +777,30 @@ function DesktopApp() {
           ].includes(name)
         ) {
           setModal("settings");
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (["subagents", "tasks", "workflows"].includes(name)) {
           setTab(name === "subagents" ? "agents" : "activity");
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "mcp") {
           nativeCommand(text);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "name") {
+          setRenameTarget(session);
           setRename(args || (active ? sessionTitle(active) : ""));
           setModal("rename");
-          setPrompt("");
+          drafts.clear(sent);
+          return;
+        }
+        if (name === "export") {
+          if (!session) throw new Error("Open a conversation to export it.");
+          await window.muse.exportSession(session);
+          drafts.clear(sent);
           return;
         }
         if (name === "copy") {
@@ -717,7 +808,7 @@ function DesktopApp() {
             .reverse()
             .find((item) => item.kind === "agentMessage");
           if (answer) await navigator.clipboard.writeText(answer.text || "");
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         if (name === "fork") {
@@ -725,13 +816,13 @@ function DesktopApp() {
           const fork = await window.muse.forkSession(session);
           void refreshSessions().catch((err) => setError(err.message));
           await loadSession(fork.session?.sessionId || fork.sessionId);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
         const builtIn = commands.find((command) => command.name === name);
         if (builtIn?.route === "native") {
           nativeCommand(text);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
       }
@@ -746,7 +837,7 @@ function DesktopApp() {
           )
         ) {
           nativeCommand(text);
-          setPrompt("");
+          drafts.clear(sent);
           return;
         }
       }
@@ -760,22 +851,15 @@ function DesktopApp() {
             : undefined;
         const ack = await window.muse.sendTurn({
           sessionId: id,
-          text: skill
-            ? ""
-            : (slash?.[1] === "agents"
+          text:
+            (skill
+              ? ""
+              : slash?.[1] === "agents"
                 ? `Use native Muse subagents to delegate independent parts of this task. ${slash[2] || "Ask me which task I want the agents to work on."}`
-                : text) +
-              images
-                .filter((image) => !image.mediaType.startsWith("image/"))
-                .map((image) =>
-                  image.mediaType.startsWith("video/")
-                    ? `\nVideo: ${image.name}. Four sampled frames are attached in chronological order. Full video file: ${image.path}`
-                    : `\nAttached file: ${image.name}\nLocal path: ${image.path}${image.text ? `\n<attached-file name=${JSON.stringify(image.name)}>\n${image.text}\n</attached-file>` : "\nRead this local file using the native tools if needed."}`,
-                )
-                .join(""),
+                : text) + attachmentContext(sentImages),
           skill,
-          images: images.flatMap((image) => image.frames),
-          attachmentIds: images.map((image) => image.id),
+          images: sentImages.flatMap((image) => image.frames),
+          attachmentIds: sentImages.map((image) => image.id),
           reasoningEffort: reasoning === "default" ? undefined : reasoning,
           ifBusy: preferences.followUp,
         });
@@ -785,29 +869,38 @@ function DesktopApp() {
             : "Muse is working…",
         );
       }
-      setPrompt("");
-      setImages([]);
+      drafts.clear(sent);
+
       followRef.current = true;
     });
   }
   async function addImages(files: FileList | File[]) {
-    if (uploading) return;
+    if (uploading || readOnly || messagesLoading) return;
+    const target = drafts.capture();
+    if (target.images.length + files.length > 8) {
+      setError("Attach up to eight files per message.");
+      return;
+    }
     setUploading(true);
+    setError("");
+    setStatus("Preparing attachments…");
+    const added: Attachment[] = [],
+      failed: string[] = [];
     try {
-      if (images.length + files.length > 8)
-        throw new Error("Attach up to eight files per message.");
-      setStatus("Preparing attachments…");
-      const added: Attachment[] = [];
-      for (const file of Array.from(files))
-        added.push(await prepareAttachment(file));
-      setImages((current) => [...current, ...added]);
+      for (const file of Array.from(files)) {
+        try {
+          added.push(await prepareAttachment(file));
+        } catch (error: any) {
+          failed.push(`${file.name}: ${error.message}`);
+        }
+      }
+      if (added.length) drafts.append(target, added);
+      if (failed.length) setError(failed.join("\n"));
       setStatus(
-        added.some((image) => image.mediaType.startsWith("video/"))
-          ? "Video ready · four frames will be sent to Muse"
-          : "Attachments ready",
+        added.length
+          ? `${added.length} attachment${added.length === 1 ? "" : "s"} ready`
+          : "No files attached",
       );
-    } catch (err: any) {
-      setError(err.message);
     } finally {
       setUploading(false);
     }
@@ -819,6 +912,7 @@ function DesktopApp() {
         "Open Muse Desktop from the installed application. This page needs the desktop bridge.",
       );
       setStatus("Desktop bridge unavailable");
+      setSessionsLoading(false);
       return;
     }
     let alive = true;
@@ -832,6 +926,18 @@ function DesktopApp() {
         method = event.method,
         id = p.sessionId;
       if (method === "account/changed") {
+        const identity = JSON.stringify([p.state, p.label]);
+        if (
+          accountIdentity.current !== null &&
+          accountIdentity.current !== identity
+        ) {
+          usageEpoch.current = Date.now();
+          ++usageGeneration.current;
+          setUsage(null);
+          setUsageChecked(null);
+          setUsageLoading(false);
+        }
+        accountIdentity.current = identity;
         setDiagnostic((prev: any) => ({ ...prev, account: p }));
         if (p.state === "accountLogin") {
           setLogin(null);
@@ -839,6 +945,13 @@ function DesktopApp() {
         }
       }
       if (method === "account/loginCompleted") {
+        if (p.outcome === "granted") {
+          usageEpoch.current = Date.now();
+          ++usageGeneration.current;
+          setUsage(null);
+          setUsageChecked(null);
+          setUsageLoading(false);
+        }
         setLogin(null);
         setLoginBusy(false);
         if (p.outcome !== "granted" && p.outcome !== "cancelled")
@@ -852,7 +965,10 @@ function DesktopApp() {
           ignore(refreshAccount());
         }
       }
-      if (method === "usage/changed") setUsage(p.observedAtMs ? p : null);
+      if (method === "usage/changed" && p.observedAtMs > usageEpoch.current)
+        setUsage((previous: any) =>
+          !previous || p.observedAtMs >= previous.observedAtMs ? p : previous,
+        );
       if (method === "session/listChanged" || method === "session/nameChanged")
         ignore(refreshSessions());
       if (!id) return;
@@ -937,10 +1053,6 @@ function DesktopApp() {
             }),
           );
         if (id === activeRef.current) {
-          if (preferencesRef.current.autoCollapse)
-            setTab((current) =>
-              current === "activity" ? "conversation" : current,
-            );
           setStatus(
             p.terminal === "completed"
               ? "Ready for your next idea"
@@ -955,7 +1067,7 @@ function DesktopApp() {
         const store = storeFor(id);
         store.apply(event);
         if (id === activeRef.current) {
-          if (buffering.current) buffering.current.push(event);
+          if (buffering.current.has(id)) buffering.current.get(id)!.push(event);
           else setItems(store.list());
         }
       }
@@ -1015,30 +1127,55 @@ function DesktopApp() {
       setLogs((prev) => [...prev, text].slice(-30)),
     );
     ignore(
-      window.muse.bootstrap().then(async (result) => {
-        if (!alive) return;
-        setDiagnostic(result.diagnostic);
-        setWorkspaces(result.workspaces || []);
-        ignore(window.muse.commands().then(setCommands));
-        ignore(window.muse.mcpInventory().then(setMcp));
-        setStatus(
-          result.diagnostic.error ||
-            (result.diagnostic.account?.state === "accountLogin"
-              ? "Muse account connected"
-              : "Ready"),
-        );
-        if (result.lastWorkspace && result.diagnostic.connected) {
-          const connected = await window.muse.connectWorkspace(
-            result.lastWorkspace,
+      window.muse
+        .bootstrap()
+        .then(async (result) => {
+          if (!alive) return;
+          setDiagnostic(result.diagnostic);
+          accountIdentity.current = JSON.stringify([
+            result.diagnostic.account?.state,
+            result.diagnostic.account?.label,
+          ]);
+          setStorage(result.storage);
+          if (result.storage?.warning) setError(result.storage.warning);
+          setWorkspaces(result.workspaces || []);
+          ignore(window.muse.commands().then(setCommands));
+          ignore(window.muse.mcpInventory().then(setMcp));
+          setStatus(
+            result.diagnostic.error ||
+              (result.diagnostic.account?.state === "accountLogin"
+                ? "Muse account connected"
+                : "Ready"),
           );
-          if (alive) await hydrateWorkspace(connected.workspace);
-        } else if (result.diagnostic.connected) {
-          ignore(refreshSessions());
-          ignore(refreshUsage());
-        } else setSessionsLoading(false);
-        if (alive && result.requestedSession && result.diagnostic.connected)
-          await loadSession(result.requestedSession);
-      }),
+          if (result.lastWorkspace && result.diagnostic.connected) {
+            try {
+              const connected = await window.muse.connectWorkspace(
+                result.lastWorkspace,
+              );
+              if (alive) await hydrateWorkspace(connected.workspace);
+            } catch (error: any) {
+              if (alive) {
+                setError(`Last project unavailable: ${error.message}`);
+                ignore(refreshSessions());
+                ignore(refreshUsage());
+              }
+            }
+          } else if (result.diagnostic.connected) {
+            ignore(refreshSessions());
+            ignore(refreshUsage());
+          } else setSessionsLoading(false);
+          if (alive && result.requestedSession && result.diagnostic.connected)
+            await loadSession(result.requestedSession);
+        })
+        .catch((error) => {
+          if (alive) {
+            setHistoryError(error.message);
+            setError(error.message);
+          }
+        })
+        .finally(() => {
+          if (alive && !sessionsRequest.current) setSessionsLoading(false);
+        }),
     );
     const focus = () => ignore(refreshAccount());
     window.addEventListener("focus", focus);
@@ -1050,7 +1187,13 @@ function DesktopApp() {
       offLogs();
       window.removeEventListener("focus", focus);
     };
-  }, [refreshAccount, refreshPending, refreshSessions, refreshUsage]);
+  }, [
+    refreshAccount,
+    refreshPending,
+    refreshSessions,
+    refreshUsage,
+    bootAttempt,
+  ]);
   useEffect(
     () => window.muse?.onNavigateSession((id) => void loadSession(id)),
     [sessions],
@@ -1081,6 +1224,14 @@ function DesktopApp() {
     )
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [items, pending]);
+  useLayoutEffect(() => {
+    if (messagesLoading || !restoreScroll.current || !scrollRef.current) return;
+    const saved = restoreScroll.current;
+    restoreScroll.current = null;
+    scrollRef.current.scrollTop = saved.follow
+      ? scrollRef.current.scrollHeight
+      : saved.top;
+  }, [session, items, messagesLoading]);
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
@@ -1088,12 +1239,18 @@ function DesktopApp() {
     }
   }, [prompt]);
   useEffect(() => {
+    const resize = () => {
+      if (innerWidth <= 950) setInspector(false);
+    };
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+  useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === ",") {
         event.preventDefault();
         setModal("settings");
       }
-      if (event.key === "Escape") setModal(null);
     };
     window.addEventListener("keydown", key);
     return () => window.removeEventListener("keydown", key);
@@ -1175,10 +1332,37 @@ function DesktopApp() {
               ))}
             </div>
           ) : null}
+          {hiddenHistory.chats.length || hiddenHistory.roots.length ? (
+            <button
+              className="archive-toggle text-button"
+              onClick={() => setShowArchived((value) => !value)}
+            >
+              {showArchived
+                ? "Hide archived conversations"
+                : `Show archived (${hiddenHistory.chats.length}) and hidden projects`}
+            </button>
+          ) : null}
+          {historyError ? (
+            <div className="sidebar-empty" role="alert">
+              <p>{historyError}</p>
+              <button
+                className="secondary-button"
+                onClick={() => {
+                  setHistoryError("");
+                  setSessionsLoading(true);
+                  setBootAttempt((value) => value + 1);
+                }}
+              >
+                Retry connection
+              </button>
+            </div>
+          ) : null}
           {groupedWorkspaces.map((root) => {
             const rows = sessions.filter(
               (row) =>
                 (row.workspaceRoot || "") === root &&
+                (showArchived ||
+                  !hiddenHistory.chats.includes(row.sessionId)) &&
                 sessionTitle(row).toLowerCase().includes(search.toLowerCase()),
             );
             if (search && !rows.length) return null;
@@ -1210,6 +1394,26 @@ function DesktopApp() {
                     <b>{root ? basename(root) : "No folder"}</b>
                     <small>{rows.length}</small>
                   </button>
+                  {root ? (
+                    <button
+                      className="icon-button"
+                      title={`Hide ${basename(root)} from projects; keep its files and chats`}
+                      onClick={() => {
+                        setHiddenHistory((previous) => ({
+                          ...previous,
+                          roots: [...new Set([...previous.roots, root])],
+                        }));
+                        void window.muse
+                          .forgetWorkspace(root)
+                          .then((result) =>
+                            setWorkspaces(result.workspaces || []),
+                          )
+                          .catch((error) => setError(error.message));
+                      }}
+                    >
+                      <X size={12} />
+                    </button>
+                  ) : null}
                   <button
                     className="icon-button"
                     title={`New conversation in ${root ? basename(root) : "workspace"}`}
@@ -1221,42 +1425,51 @@ function DesktopApp() {
                 </div>
                 {!collapsed[root]
                   ? rows.map((row) => (
-                      <button
-                        key={row.sessionId}
-                        disabled={busy}
-                        className={`session-row ${row.sessionId === session ? "active" : ""} ${turns[row.sessionId] || row.status === "running" ? "running" : completed[row.sessionId] ? "done" : ""}`}
-                        onClick={() => void loadSession(row.sessionId)}
-                        title={sessionTitle(row)}
-                      >
-                        {turns[row.sessionId] || row.status === "running" ? (
-                          <Loader2 className="spin" size={12} />
-                        ) : completed[row.sessionId] ? (
-                          <Check size={12} />
-                        ) : (
-                          <MessageSquare size={12} />
-                        )}
-                        <span>
-                          <b>{sessionTitle(row)}</b>
-                          <small>
-                            {turns[row.sessionId]
-                              ? "Working…"
-                              : completed[row.sessionId] ||
-                                timeAgo(row.lastActivityAt || row.updatedAt)}
-                          </small>
-                        </span>
-                        {row.attention ? (
-                          <span
-                            className="attention-dot"
-                            title="Needs attention"
-                          />
-                        ) : null}
-                      </button>
+                      <div className="session-row-wrap" key={row.sessionId}>
+                        <button
+                          disabled={busy}
+                          className={`session-row ${row.sessionId === session ? "active" : ""} ${turns[row.sessionId] || row.status === "running" ? "running" : completed[row.sessionId] ? "done" : ""}`}
+                          onClick={() => void loadSession(row.sessionId)}
+                          title={sessionTitle(row)}
+                        >
+                          {turns[row.sessionId] || row.status === "running" ? (
+                            <Loader2 className="spin" size={12} />
+                          ) : completed[row.sessionId] ? (
+                            <Check size={12} />
+                          ) : (
+                            <MessageSquare size={12} />
+                          )}
+                          <span>
+                            <b>{sessionTitle(row)}</b>
+                            <small>
+                              {turns[row.sessionId]
+                                ? "Working…"
+                                : completed[row.sessionId] ||
+                                  timeAgo(row.lastActivityAt || row.updatedAt)}
+                            </small>
+                          </span>
+                          {row.attention ? (
+                            <span
+                              className="attention-dot"
+                              title="Needs attention"
+                            />
+                          ) : null}
+                        </button>
+                        <button
+                          className="icon-button session-more"
+                          aria-label="Conversation actions"
+                          title={`Actions for ${sessionTitle(row)}`}
+                          onClick={() => setConversationMenu(row)}
+                        >
+                          <MoreHorizontal size={14} />
+                        </button>
+                      </div>
                     ))
                   : null}
               </section>
             );
           })}
-          {!sessionsLoading && sessions.length === 0 ? (
+          {!sessionsLoading && !historyError && sessions.length === 0 ? (
             <div className="sidebar-empty">
               <MessageSquare size={20} />
               <p>Your ideas start here.</p>
@@ -1273,7 +1486,7 @@ function DesktopApp() {
             <Terminal size={15} /> Muse CLI <ArrowUpRight size={13} />
           </button>
           <button className="sidebar-link" onClick={() => setModal("settings")}>
-            <Settings2 size={15} /> Settings <kbd>⌘ ,</kbd>
+            <Settings2 size={15} /> Settings <kbd>{modifier} ,</kbd>
           </button>
         </div>
       </aside>
@@ -1368,6 +1581,7 @@ function DesktopApp() {
           >
             <NativeTerminal
               workspace={workspace}
+              sessionId={session}
               visible={tab === "terminal"}
               theme={{
                 ...theme,
@@ -1403,9 +1617,68 @@ function DesktopApp() {
             const target = event.currentTarget;
             followRef.current =
               target.scrollHeight - target.scrollTop - target.clientHeight < 80;
+            if (activeRef.current)
+              scrollPositions.current.set(activeRef.current, {
+                top: target.scrollTop,
+                follow: followRef.current,
+              });
             setShowLatest(!followRef.current);
           }}
         >
+          {diagnostic?.connected && !signedIn ? (
+            <section className="connection-onboarding">
+              <b>Connect your Muse account</b>
+              <p>
+                Sign in once with Muse Code. The desktop reuses the CLI session
+                on this computer.
+              </p>
+              <button
+                className="secondary-button"
+                onClick={() => void openLogin()}
+              >
+                Connect Muse Code
+              </button>
+              <button
+                className="text-button"
+                onClick={() => void refreshAccount()}
+              >
+                Check CLI sign-in
+              </button>
+            </section>
+          ) : null}
+          {!diagnostic?.connected && diagnostic ? (
+            <section className="connection-onboarding">
+              <b>
+                {diagnostic.cliInstalled
+                  ? "Reconnect Muse Code"
+                  : "Install or locate Muse Code"}
+              </b>
+              <p>
+                {diagnostic.error ||
+                  "The desktop app uses your installed Muse CLI and its active account session."}
+              </p>
+              <button
+                className="secondary-button"
+                onClick={() =>
+                  void run(async () => {
+                    const result = await window.muse.chooseBinary();
+                    if (result) {
+                      setDiagnostic(result);
+                      setBootAttempt((value) => value + 1);
+                    }
+                  })
+                }
+              >
+                Locate Muse CLI
+              </button>
+              <button
+                className="text-button"
+                onClick={() => setBootAttempt((value) => value + 1)}
+              >
+                Retry
+              </button>
+            </section>
+          ) : null}
           {tab === "agents" ? (
             <AgentsPanel
               items={items}
@@ -1507,7 +1780,7 @@ function DesktopApp() {
                 workspace={workspace}
                 working={working}
                 autoCollapse={preferences.autoCollapse}
-                media={media[session] || {}}
+                media={media[session] || EMPTY_MEDIA}
               />
             ) : (
               showItems.map((item) => (
@@ -1534,7 +1807,11 @@ function DesktopApp() {
                   <i />
                   <i />
                 </span>
-                <span>Muse is working in your project</span>
+                <span>
+                  {workspace
+                    ? "Muse is working in your project"
+                    : "Muse is working in this conversation"}
+                </span>
               </div>
             ) : null}
             {pending.approvals.map((approval) => (
@@ -1621,20 +1898,36 @@ function DesktopApp() {
                 {images.map((image, index) => (
                   <div key={`${image.name}-${index}`}>
                     {image.mediaType.startsWith("video/") ? (
-                      <video src={image.preview} preload="metadata" />
+                      <SafeMedia
+                        kind="video"
+                        src={image.path}
+                        preload="metadata"
+                      />
                     ) : image.mediaType.startsWith("image/") ? (
-                      <img src={image.preview} alt={image.name} />
+                      <SafeMedia src={image.path} alt={image.name} />
                     ) : (
                       <FileText size={22} className="file-thumbnail" />
                     )}
-                    <span>{image.name}</span>
+                    <span
+                      title={
+                        image.textTruncated
+                          ? "Excerpt limited to 100,000 characters. Muse can read the full local file."
+                          : image.name
+                      }
+                    >
+                      {image.name}
+                      {image.textTruncated ? " · excerpt" : ""}
+                    </span>
                     <button
                       title={`Remove ${image.name}`}
-                      onClick={() =>
+                      onClick={() => {
                         setImages((current) =>
                           current.filter((_, i) => i !== index),
-                        )
-                      }
+                        );
+                        void window.muse
+                          .discardAttachment(image.id)
+                          .catch(() => {});
+                      }}
                     >
                       <X size={12} />
                     </button>
@@ -1645,6 +1938,7 @@ function DesktopApp() {
             {slashOptions.length ? (
               <div
                 className="slash-menu"
+                id="slash-menu"
                 role="listbox"
                 aria-label="Muse slash commands"
               >
@@ -1680,7 +1974,7 @@ function DesktopApp() {
                   : "What would you like to create?"
               }
               value={prompt}
-              disabled={readOnly}
+              disabled={readOnly || messagesLoading || !diagnostic?.connected}
               onChange={(event) => setPrompt(event.target.value)}
               onPaste={(event) => {
                 if (event.clipboardData.files.length) {
@@ -1873,6 +2167,9 @@ function DesktopApp() {
                     busy ||
                     uploading ||
                     readOnly ||
+                    messagesLoading ||
+                    !diagnostic?.connected ||
+                    !signedIn ||
                     (!prompt.trim() && !images.length)
                   }
                   onClick={() => void sendPrompt()}
@@ -2158,331 +2455,396 @@ function DesktopApp() {
           }}
         />
       ) : null}
-      {modal ? (
-        <div
-          className="modal-backdrop"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) setModal(null);
-          }}
+      {conversationMenu ? (
+        <Modal
+          label="Conversation actions"
+          onClose={() => setConversationMenu(null)}
         >
-          <section
-            className="modal"
-            role="dialog"
-            aria-modal="true"
-            aria-label={
-              modal === "account"
-                ? "Muse account"
-                : modal === "settings"
-                  ? "Settings"
-                  : modal === "rename"
-                    ? "Rename conversation"
-                    : "Quick guide"
-            }
-          >
+          <h2>{sessionTitle(conversationMenu)}</h2>
+          <p>
+            Archive hides a conversation from this desktop. Its native Muse
+            history and files stay available.
+          </p>
+          <div className="conversation-actions">
             <button
-              className="modal-close icon-button"
-              title="Close dialog"
-              onClick={() => setModal(null)}
+              className="secondary-button"
+              onClick={() => {
+                setRenameTarget(conversationMenu.sessionId);
+                setRename(sessionTitle(conversationMenu));
+                setConversationMenu(null);
+                setModal("rename");
+              }}
             >
-              <X size={18} />
+              Rename
             </button>
-            {modal === "account" ? (
-              <>
-                <div className="modal-symbol">
-                  <MuseMark large />
+            <button
+              className="secondary-button"
+              onClick={() =>
+                void run(async () => {
+                  await window.muse.exportSession(conversationMenu.sessionId);
+                  setConversationMenu(null);
+                })
+              }
+            >
+              Export Markdown
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!!turns[conversationMenu.sessionId]}
+              onClick={() => {
+                const id = conversationMenu.sessionId;
+                setHiddenHistory((previous) => ({
+                  ...previous,
+                  chats: previous.chats.includes(id)
+                    ? previous.chats.filter((value) => value !== id)
+                    : [...previous.chats, id],
+                }));
+                setConversationMenu(null);
+              }}
+            >
+              {hiddenHistory.chats.includes(conversationMenu.sessionId)
+                ? "Restore conversation"
+                : "Archive conversation"}
+            </button>
+          </div>
+        </Modal>
+      ) : null}
+      {modal ? (
+        <Modal
+          label={
+            modal === "account"
+              ? "Muse account"
+              : modal === "settings"
+                ? "Settings"
+                : modal === "rename"
+                  ? "Rename conversation"
+                  : "Quick guide"
+          }
+          onClose={() => setModal(null)}
+        >
+          <button
+            className="modal-close icon-button"
+            title="Close dialog"
+            onClick={() => setModal(null)}
+          >
+            <X size={18} />
+          </button>
+          {modal === "account" ? (
+            <>
+              <div className="modal-symbol">
+                <MuseMark large />
+              </div>
+              <span className="eyebrow">YOUR MUSE ACCOUNT</span>
+              <h2>
+                {signedIn
+                  ? "Right where you left off."
+                  : "Bring your Muse along."}
+              </h2>
+              <p>
+                Your desktop app shares the official Muse Code sign-in on this
+                computer.
+              </p>
+              <div className="account-state">
+                <span className={`tiny-status ${signedIn ? "" : "working"}`} />
+                <div>
+                  <b>{accountName}</b>
+                  <small>
+                    {signedIn
+                      ? "Your CLI browser session is active."
+                      : account?.message ||
+                        "Sign in to use your Muse Code subscription."}
+                  </small>
                 </div>
-                <span className="eyebrow">YOUR MUSE ACCOUNT</span>
-                <h2>
-                  {signedIn
-                    ? "Right where you left off."
-                    : "Bring your Muse along."}
-                </h2>
-                <p>
-                  Your desktop app shares the official Muse Code sign-in on this
-                  computer.
-                </p>
-                <div className="account-state">
-                  <span
-                    className={`tiny-status ${signedIn ? "" : "working"}`}
-                  />
-                  <div>
-                    <b>{accountName}</b>
-                    <small>
-                      {signedIn
-                        ? "Your CLI browser session is active."
-                        : account?.message ||
-                          "Sign in to use your Muse Code subscription."}
-                    </small>
-                  </div>
-                </div>
-                {login?.userCode ? (
-                  <div className="device-login">
-                    <small>CONFIRM THIS CODE IN YOUR BROWSER</small>
-                    <strong>{login.userCode}</strong>
-                    <button
-                      className="accent-button"
-                      onClick={() =>
-                        void run(() =>
-                          window.muse.openExternal(login.verificationUrl),
-                        )
-                      }
-                    >
-                      Continue in browser <ExternalLink size={14} />
-                    </button>
-                    <span>
-                      <Loader2 className="spin" size={12} /> Waiting for
-                      confirmation…
-                    </span>
-                    <button
-                      className="text-button"
-                      onClick={() =>
-                        void run(async () => {
-                          await window.muse.cancelLogin();
-                          setLogin(null);
-                        })
-                      }
-                    >
-                      Cancel sign-in
-                    </button>
-                  </div>
-                ) : (
-                  <div className="modal-actions">
-                    <button
-                      className="accent-button"
-                      disabled={loginBusy}
-                      onClick={() => void openLogin()}
-                    >
-                      {loginBusy ? (
-                        <Loader2 className="spin" size={15} />
-                      ) : (
-                        <LogIn size={15} />
-                      )}
-                      {signedIn
-                        ? "Switch Muse account"
-                        : "Sign in with Muse Code"}
-                    </button>
-                    <button
-                      className="secondary-button"
-                      disabled={busy}
-                      onClick={() => void run(refreshAccount)}
-                    >
-                      <RefreshCw size={14} /> Refresh
-                    </button>
-                  </div>
-                )}
-                <small className="modal-note">
-                  Credentials remain in Muse Code’s existing credential store.
-                </small>
-              </>
-            ) : null}
-            {modal === "settings" ? (
-              <>
-                <span className="eyebrow">MAKE YOURSELF AT HOME</span>
-                <h2>Workspace settings</h2>
-                <div className="version-card">
-                  <MuseMark />
-                  <b>Muse Desktop</b>
-                  <span className="beta-badge">BETA</span>
-                  <code>v{appVersion}</code>
-                </div>
-                <p>
-                  Connected to the same Muse Code installation as your terminal.
-                </p>
-                <fieldset className="appearance-settings">
-                  <legend>Appearance</legend>
-                  <p>
-                    Choose a palette. Your preference is saved on this computer.
-                  </p>
-                  <div className="theme-grid">
-                    {themes.map((option) => (
-                      <label className="theme-choice" key={option.id}>
-                        <input
-                          type="radio"
-                          name="theme"
-                          value={option.id}
-                          checked={themePreference === option.id}
-                          onChange={() => setThemePreference(option.id)}
-                        />
-                        <span
-                          className="theme-swatch"
-                          aria-hidden="true"
-                          style={{
-                            background: option.colors.bg,
-                            borderColor: option.colors.elevated,
-                          }}
-                        >
-                          <i style={{ background: option.colors.panel }} />
-                          <i style={{ background: option.colors.accent }} />
-                          <i style={{ background: option.colors.mint }} />
-                        </span>
-                        <span>
-                          <b>{option.name}</b>
-                          <small>{option.description}</small>
-                        </span>
-                        <Check
-                          className="theme-check"
-                          size={13}
-                          aria-hidden="true"
-                        />
-                      </label>
-                    ))}
-                  </div>
-                  <label className="system-theme-choice">
-                    <input
-                      type="radio"
-                      name="theme"
-                      value="system"
-                      checked={themePreference === "system"}
-                      onChange={() => setThemePreference("system")}
-                    />
-                    <span>
-                      <b>Follow system</b>
-                      <small>
-                        Use Muse Dark or Paper with your Windows appearance.
-                      </small>
-                    </span>
-                  </label>
-                </fieldset>
-                <DesktopSettings
-                  value={preferences}
-                  onChange={setPreferences}
-                />
-                <div className="setting-row">
-                  <div>
-                    <b>Muse Code runtime</b>
-                    <small>{diagnostic?.version || "Not detected"}</small>
-                    <code>
-                      {diagnostic?.binary ||
-                        diagnostic?.error ||
-                        "Select the Muse executable below."}
-                    </code>
-                  </div>
+              </div>
+              {login?.userCode ? (
+                <div className="device-login">
+                  <small>CONFIRM THIS CODE IN YOUR BROWSER</small>
+                  <strong>{login.userCode}</strong>
                   <button
-                    className="secondary-button"
-                    disabled={busy}
+                    className="accent-button"
+                    onClick={() =>
+                      void run(() =>
+                        window.muse.openExternal(login.verificationUrl),
+                      )
+                    }
+                  >
+                    Continue in browser <ExternalLink size={14} />
+                  </button>
+                  <span>
+                    <Loader2 className="spin" size={12} /> Waiting for
+                    confirmation…
+                  </span>
+                  <button
+                    className="text-button"
                     onClick={() =>
                       void run(async () => {
-                        const result = await window.muse.chooseBinary();
-                        if (result) setDiagnostic(result);
+                        await window.muse.cancelLogin();
+                        setLogin(null);
                       })
                     }
                   >
-                    Locate CLI
+                    Cancel sign-in
                   </button>
                 </div>
-                <div className="setting-row">
-                  <div>
-                    <b>Account</b>
-                    <small>{accountName}</small>
-                  </div>
+              ) : (
+                <div className="modal-actions">
+                  <button
+                    className="accent-button"
+                    disabled={loginBusy}
+                    onClick={() => void openLogin()}
+                  >
+                    {loginBusy ? (
+                      <Loader2 className="spin" size={15} />
+                    ) : (
+                      <LogIn size={15} />
+                    )}
+                    {signedIn
+                      ? "Switch Muse account"
+                      : "Sign in with Muse Code"}
+                  </button>
                   <button
                     className="secondary-button"
-                    onClick={() => setModal("account")}
+                    disabled={busy}
+                    onClick={() => void run(refreshAccount)}
                   >
-                    Manage
+                    <RefreshCw size={14} /> Refresh
                   </button>
                 </div>
-                <div className="setting-row">
-                  <div>
-                    <b>Project</b>
-                    <small>{workspace || "No folder selected"}</small>
-                  </div>
-                  <button
-                    className="secondary-button"
-                    disabled={working || busy}
-                    onClick={chooseWorkspace}
-                  >
-                    Change
-                  </button>
-                </div>
-                <div className="setting-row">
-                  <div>
-                    <b>Terminal features</b>
-                    <small>
-                      Open the native CLI for its complete command palette.
-                    </small>
-                  </div>
-                  <button
-                    className="secondary-button"
-                    onClick={() => void run(() => window.muse.openCli())}
-                  >
-                    <Terminal size={14} /> Open CLI
-                  </button>
-                </div>
-                {diagnostic?.fingerprintWarning ? (
-                  <p className="compatibility-note">
-                    Your CLI schema is newer than the SDK. Core methods are
-                    supported; protocol errors appear explicitly.
-                  </p>
-                ) : null}
-                {logs.length ? (
-                  <details className="runtime-logs">
-                    <summary>Runtime diagnostics</summary>
-                    <pre>{logs.join("\n")}</pre>
-                  </details>
-                ) : null}
-                <button
-                  className="text-button"
-                  onClick={() => setModal("help")}
-                >
-                  Keyboard shortcuts and command guide{" "}
-                  <ArrowUpRight size={12} />
-                </button>
-              </>
-            ) : null}
-            {modal === "help" ? (
-              <>
-                <span className="eyebrow">A FEW HELPFUL SHORTCUTS</span>
-                <h2>Work at your own pace.</h2>
-                <div className="guide-grid">
-                  {[
-                    ["Enter", "Send or queue a follow-up"],
-                    ["Shift + Enter", "New line"],
-                    ["Ctrl / ⌘ + ,", "Open settings"],
-                    ["!command", "Run a workspace shell command"],
-                    ["/new · /clear", "Start a new conversation"],
-                    ["/compact", "Compact session context"],
-                    ["/login", "Sign in with Muse Code"],
-                    ["/resume", "Find an existing conversation"],
-                    ["/skill-name", "Invoke a project skill"],
-                    ["/terminal", "Open the complete Muse CLI"],
-                  ].map(([key, label]) => (
-                    <div key={key}>
-                      <code>{key}</code>
-                      <span>{label}</span>
-                    </div>
+              )}
+              <small className="modal-note">
+                Credentials remain in Muse Code’s existing credential store.
+              </small>
+            </>
+          ) : null}
+          {modal === "settings" ? (
+            <>
+              <span className="eyebrow">MAKE YOURSELF AT HOME</span>
+              <h2>Workspace settings</h2>
+              <div className="version-card">
+                <MuseMark />
+                <b>Muse Desktop</b>
+                <span className="beta-badge">BETA</span>
+                <code>v{appVersion}</code>
+              </div>
+              <p>
+                Connected to the same Muse Code installation as your terminal.
+              </p>
+              <fieldset className="appearance-settings">
+                <legend>Appearance</legend>
+                <p>
+                  Choose a palette. Your preference is saved on this computer.
+                </p>
+                <div className="theme-grid">
+                  {themes.map((option) => (
+                    <label className="theme-choice" key={option.id}>
+                      <input
+                        type="radio"
+                        name="theme"
+                        value={option.id}
+                        checked={themePreference === option.id}
+                        onChange={() => setThemePreference(option.id)}
+                      />
+                      <span
+                        className="theme-swatch"
+                        aria-hidden="true"
+                        style={{
+                          background: option.colors.bg,
+                          borderColor: option.colors.elevated,
+                        }}
+                      >
+                        <i style={{ background: option.colors.panel }} />
+                        <i style={{ background: option.colors.accent }} />
+                        <i style={{ background: option.colors.mint }} />
+                      </span>
+                      <span>
+                        <b>{option.name}</b>
+                        <small>{option.description}</small>
+                      </span>
+                      <Check
+                        className="theme-check"
+                        size={13}
+                        aria-hidden="true"
+                      />
+                    </label>
                   ))}
                 </div>
-              </>
-            ) : null}
-            {modal === "rename" ? (
-              <>
-                <span className="eyebrow">GIVE THIS IDEA A NAME</span>
-                <h2>Rename conversation</h2>
-                <input
-                  className="rename-input"
-                  aria-label="Conversation name"
-                  value={rename}
-                  maxLength={120}
-                  onChange={(event) => setRename(event.target.value)}
-                />
+                <label className="system-theme-choice">
+                  <input
+                    type="radio"
+                    name="theme"
+                    value="system"
+                    checked={themePreference === "system"}
+                    onChange={() => setThemePreference("system")}
+                  />
+                  <span>
+                    <b>Follow system</b>
+                    <small>
+                      Use Muse Dark or Paper with your Windows appearance.
+                    </small>
+                  </span>
+                </label>
+              </fieldset>
+              <DesktopSettings value={preferences} onChange={setPreferences} />
+              <div className="setting-row">
+                <div>
+                  <b>Muse Code runtime</b>
+                  <small>{diagnostic?.version || "Not detected"}</small>
+                  <code>
+                    {diagnostic?.binary ||
+                      diagnostic?.error ||
+                      "Select the Muse executable below."}
+                  </code>
+                </div>
                 <button
-                  className="accent-button"
-                  disabled={busy || !rename.trim()}
+                  className="secondary-button"
+                  disabled={busy}
                   onClick={() =>
                     void run(async () => {
-                      await window.muse.rename(session, rename.trim());
-                      await refreshSessions();
-                      setModal(null);
+                      const result = await window.muse.chooseBinary();
+                      if (result) setDiagnostic(result);
                     })
                   }
                 >
-                  Save name
+                  Locate CLI
                 </button>
-              </>
-            ) : null}
-          </section>
-        </div>
+              </div>
+              <div className="setting-row">
+                <div>
+                  <b>Account</b>
+                  <small>{accountName}</small>
+                </div>
+                <button
+                  className="secondary-button"
+                  onClick={() => setModal("account")}
+                >
+                  Manage
+                </button>
+              </div>
+              <div className="setting-row">
+                <div>
+                  <b>Project</b>
+                  <small>{workspace || "No folder selected"}</small>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={working || busy}
+                  onClick={chooseWorkspace}
+                >
+                  Change
+                </button>
+              </div>
+              <div className="setting-row">
+                <div>
+                  <b>Terminal features</b>
+                  <small>
+                    Open the native CLI for its complete command palette.
+                  </small>
+                </div>
+                <button
+                  className="secondary-button"
+                  onClick={() => void run(() => window.muse.openCli())}
+                >
+                  <Terminal size={14} /> Open CLI
+                </button>
+              </div>
+              {diagnostic?.fingerprintWarning ? (
+                <p className="compatibility-note">
+                  Your CLI schema is newer than the SDK. Core methods are
+                  supported; protocol errors appear explicitly.
+                </p>
+              ) : null}
+              {logs.length ? (
+                <details className="runtime-logs">
+                  <summary>Runtime diagnostics</summary>
+                  <pre>{logs.join("\n")}</pre>
+                </details>
+              ) : null}
+              <button className="text-button" onClick={() => setModal("help")}>
+                Keyboard shortcuts and command guide <ArrowUpRight size={12} />
+              </button>
+            </>
+          ) : null}
+          {modal === "help" ? (
+            <>
+              <span className="eyebrow">A FEW HELPFUL SHORTCUTS</span>
+              <h2>Work at your own pace.</h2>
+              <div className="guide-grid">
+                {[
+                  ["Enter", "Send or queue a follow-up"],
+                  ["Shift + Enter", "New line"],
+                  ["Ctrl / ⌘ + ,", "Open settings"],
+                  ["!command", "Run a workspace shell command"],
+                  ["/new · /clear", "Start a new conversation"],
+                  ["/compact", "Compact session context"],
+                  ["/login", "Sign in with Muse Code"],
+                  ["/resume", "Find an existing conversation"],
+                  ["/skill-name", "Invoke a project skill"],
+                  ["/terminal", "Open the complete Muse CLI"],
+                ].map(([key, label]) => (
+                  <div key={key}>
+                    <code>{key}</code>
+                    <span>{label}</span>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : null}
+          {modal === "settings" ? (
+            <section className="attachment-storage">
+              <h3>Local attachments</h3>
+              <p>
+                {storage
+                  ? `${storage.files} files · ${(storage.bytes / 1024 / 1024).toFixed(1)} MB`
+                  : "Files stay on this computer."}
+              </p>
+              <button
+                className="text-button"
+                disabled={busy || uploading}
+                onClick={() =>
+                  void run(async () => {
+                    const retained = await drafts.retainedIds();
+                    const result = await window.muse.purgeAttachments(retained);
+                    setStorage(await window.muse.storageStats());
+                    if (!result.cancelled)
+                      setStatus(`${result.removed} unused copies removed`);
+                  })
+                }
+              >
+                Clean unused attachment copies
+              </button>
+              <small>Sent files and saved drafts are kept.</small>
+            </section>
+          ) : null}
+          {modal === "rename" ? (
+            <>
+              <span className="eyebrow">GIVE THIS IDEA A NAME</span>
+              <h2>Rename conversation</h2>
+              <input
+                className="rename-input"
+                aria-label="Conversation name"
+                value={rename}
+                maxLength={120}
+                onChange={(event) => setRename(event.target.value)}
+              />
+              <button
+                className="accent-button"
+                disabled={busy || !rename.trim()}
+                onClick={() =>
+                  void run(async () => {
+                    await window.muse.rename(
+                      renameTarget || session,
+                      rename.trim(),
+                    );
+                    await refreshSessions();
+                    setModal(null);
+                  })
+                }
+              >
+                Save name
+              </button>
+            </>
+          ) : null}
+        </Modal>
       ) : null}
     </div>
   );

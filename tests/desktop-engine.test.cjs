@@ -144,7 +144,9 @@ test("media is retained per command, streams ranges, and rejects non-media files
       "reference.png",
     );
     const response = await reopened.serveMedia(
-      new Request(image.url, { headers: { range: "bytes=1-4" } }),
+      new Request(reopened.sessionMedia("chat").command[0].url, {
+        headers: { range: "bytes=1-4" },
+      }),
     );
     assert.equal(response.status, 206);
     assert.equal(await response.text(), "edia");
@@ -156,7 +158,7 @@ test("media is retained per command, streams ranges, and rejects non-media files
           ),
         )
       ).status,
-      415,
+      404,
     );
     await assert.rejects(
       async () =>
@@ -393,6 +395,54 @@ test("document attachments retain safe names, text and history without serving a
           base64Data: "A".repeat(36 * 1024 * 1024),
         }),
       /too large/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("usage refresh cannot restore an observation from a previous account", async () => {
+  const { engine, hosts } = fixture();
+  await engine.startSession();
+  const old = { observedAtMs: Date.now() - 100, tier: "previous" };
+  hosts[1].query = async () => ({ usage: old });
+  engine.publish("muse:event", {
+    method: "account/changed",
+    params: { state: "accountLogin", label: "A" },
+  });
+  assert.equal((await engine.readUsage()).usage.tier, "previous");
+  engine.publish("muse:event", {
+    method: "account/changed",
+    params: { state: "accountLogin", label: "B" },
+  });
+  assert.equal((await engine.readUsage()).usage, undefined);
+});
+test("concurrent resume requests share one host; idle hosts are bounded without closing running agents", async () => {
+  const { engine, hosts } = fixture();
+  await Promise.all([
+    engine.command("session/resume", { sessionId: "same" }),
+    engine.command("session/resume", { sessionId: "same" }),
+  ]);
+  assert.equal(hosts.length, 2);
+  hosts[1].query = async () => ({
+    session: { activeTurnId: "running" },
+    history: { items: [] },
+  });
+  for (let i = 0; i < 20; i++) await engine.startSession();
+  assert.equal(hosts[1].closed, false);
+  assert.ok(new Set(engine.sessions.values()).size <= 6);
+});
+test("terminal context retains the actual standalone root after resuming a no-folder chat", async () => {
+  const { engine, hosts } = fixture();
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "muse-cwd-"));
+  try {
+    hosts[0].query = async () => ({ session: { workspaceRoot: root } });
+    engine.options.standaloneRoot = path.dirname(root);
+    assert.equal(await engine.workspaceForSession("saved"), root);
+    assert.equal(
+      engine.projectSession({ sessionId: "saved", workspaceRoot: root })
+        .workspaceRoot,
+      "",
     );
   } finally {
     fs.rmSync(root, { recursive: true, force: true });

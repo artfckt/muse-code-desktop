@@ -6,6 +6,7 @@ const {
   shell,
   Notification,
   protocol,
+  session,
 } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
@@ -14,6 +15,15 @@ const { subscriptionEnvironment } = require("./muse-host.cjs");
 const { NativeTerminal } = require("./native-terminal.cjs");
 const { DesktopEngine } = require("./desktop-engine.cjs");
 const { DesktopServices, localPath } = require("./desktop-services.cjs");
+const {
+  trustedWindow,
+  trustedDocument,
+  authorizeAgent,
+} = require("./renderer-security.cjs");
+const securityOptions = {
+  appRoot: path.join(__dirname, ".."),
+  devUrl: !app.isPackaged ? process.env.VITE_DEV_SERVER_URL : undefined,
+};
 const commandCatalog = require("./command-catalog.cjs");
 if (process.env.MUSE_DESKTOP_DATA_DIR) {
   const directory = path.resolve(process.env.MUSE_DESKTOP_DATA_DIR);
@@ -27,11 +37,13 @@ protocol.registerSchemesAsPrivileged([
       standard: true,
       secure: true,
       supportFetchAPI: true,
+      corsEnabled: true,
       stream: true,
     },
   },
 ]);
 const windows = new Set();
+const configuredSessions = new WeakSet();
 let services;
 const terminal = new NativeTerminal(emit);
 let window,
@@ -51,18 +63,36 @@ const settingsPath = () =>
   path.join(app.getPath("userData"), "desktop-settings.json");
 function settings() {
   try {
-    return JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    try {
+      return JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+    } catch {
+      return JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"));
+    }
   } catch {
     return {};
   }
 }
 function saveSettings(value) {
   fs.mkdirSync(app.getPath("userData"), { recursive: true });
-  fs.writeFileSync(settingsPath(), JSON.stringify({ ...settings(), ...value }));
+  const staged = `${settingsPath()}.tmp`;
+  fs.writeFileSync(staged, JSON.stringify({ ...settings(), ...value }));
+  fs.copyFileSync(staged, `${settingsPath()}.bak.tmp`);
+  fs.renameSync(`${settingsPath()}.bak.tmp`, `${settingsPath()}.bak`);
+  fs.renameSync(staged, settingsPath());
 }
 function emit(channel, payload) {
-  for (const target of windows)
-    if (!target.isDestroyed()) target.webContents.send(channel, payload);
+  if (channel === "muse:event" && payload?.params?.item)
+    services?.observeItems(payload.params.sessionId, [payload.params.item]);
+  for (const target of windows) {
+    if (target.isDestroyed()) continue;
+    if (
+      target.agentSessionId &&
+      (channel !== "muse:event" ||
+        payload?.params?.sessionId !== target.agentSessionId)
+    )
+      continue;
+    target.webContents.send(channel, payload);
+  }
 }
 function externalUrl(value) {
   const url = new URL(value);
@@ -70,9 +100,11 @@ function externalUrl(value) {
     throw new Error("Only web links can be opened.");
   return url.href;
 }
-async function openCli(login = false) {
+async function openCli(login = false, context = {}) {
   const binary = muse.executable(),
-    cwd = muse.workspace || app.getPath("home"),
+    cwd = context.sessionId
+      ? await muse.workspaceForSession(context.sessionId)
+      : context.workspaceRoot || app.getPath("home"),
     env = subscriptionEnvironment(process.env);
   let command, launchArgs;
   if (process.platform === "win32") {
@@ -136,19 +168,25 @@ function createWindow(agent) {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
+      ...(agent ? { partition: `muse-agent-${agent.sessionId}` } : {}),
     },
   });
+  configureSession(target.webContents.session);
   windows.add(target);
   target.agentSessionId = agent?.sessionId;
+  target.parentSessionId = agent?.parentSessionId;
+  if (agent) muse?.pinSession(agent.sessionId);
   target.on("closed", () => {
     windows.delete(target);
     if (
       agent &&
       ![...windows].some((other) => other.agentSessionId === agent.sessionId)
-    )
+    ) {
+      muse?.unpinSession(agent.sessionId);
       void muse
         ?.query("view/unsubscribe", { sessionId: agent.sessionId })
         .catch(() => {});
+    }
   });
   if (!agent) window = target;
   target.webContents.setWindowOpenHandler(({ url }) => {
@@ -160,9 +198,9 @@ function createWindow(agent) {
   target.webContents.on("will-navigate", (event, url) => {
     if (url !== target.webContents.getURL()) event.preventDefault();
   });
-  if (process.env.VITE_DEV_SERVER_URL)
+  if (securityOptions.devUrl)
     target.loadURL(
-      `${process.env.VITE_DEV_SERVER_URL}${agent ? `?agent=${encodeURIComponent(agent.sessionId)}&parent=${encodeURIComponent(agent.parentSessionId || "")}` : ""}`,
+      `${securityOptions.devUrl}${agent ? `?agent=${encodeURIComponent(agent.sessionId)}&parent=${encodeURIComponent(agent.parentSessionId || "")}` : ""}`,
     );
   else
     target.loadFile(
@@ -179,6 +217,33 @@ function createWindow(agent) {
   if (agent) target.setTitle("Muse Agent");
   return target;
 }
+function configureSession(targetSession) {
+  if (configuredSessions.has(targetSession)) return;
+  configuredSessions.add(targetSession);
+  targetSession.protocol.handle("muse-media", (request) =>
+    services.serveMedia(request),
+  );
+  // protocol.handle has no sender identity. Check the requesting webContents
+  // before the file handler and also require a main-issued file capability.
+  targetSession.webRequest.onBeforeRequest(
+    { urls: ["muse-media://*/*"] },
+    (details, callback) => {
+      const target = [...windows].find(
+        (window) =>
+          !window.isDestroyed() &&
+          window.webContents.id === details.webContentsId,
+      );
+      const mediaSession = new URL(details.url).searchParams.get("session");
+      const allowed =
+        target &&
+        (!target.agentSessionId || mediaSession === target.agentSessionId) &&
+        trustedDocument(target.webContents.getURL(), securityOptions) &&
+        details.frame &&
+        details.frame === target.webContents.mainFrame;
+      callback({ cancel: !allowed });
+    },
+  );
+}
 app.whenReady().then(() => {
   if (process.platform === "win32")
     app.setAppUserModelId("site.lunada.musedesktop");
@@ -192,11 +257,59 @@ app.whenReady().then(() => {
     savePolicies: (sessionProfiles) => saveSettings({ sessionProfiles }),
   });
   services = new DesktopServices(app.getPath("userData"), muse);
-  protocol.handle("muse-media", (request) => services.serveMedia(request));
+  configureSession(session.defaultSession);
   const handle = (name, fn) =>
-    ipcMain.handle(`muse:${name}`, (_event, ...args) => fn(...args));
+    ipcMain.handle(`muse:${name}`, (event, ...args) => {
+      const target = trustedWindow(
+        windows,
+        event.sender,
+        event.senderFrame,
+        securityOptions,
+      );
+      authorizeAgent(target, name, args, muse);
+      if (target.agentSessionId && name === "resolve-media")
+        return services.resolveMedia(String(args[0]), args[1], true);
+      if (target.agentSessionId && name === "open-local")
+        return services
+          .approvedPath(String(args[0]), target.agentSessionId, true)
+          .then((file) => shell.showItemInFolder(file));
+      return fn(...args);
+    });
+  const observedSession = async (id, resume = false) => {
+    const result = resume
+      ? await muse.command("session/resume", {
+          sessionId: id,
+          excludeItems: false,
+        })
+      : await muse.query("session/read", {
+          sessionId: id,
+          excludeItems: false,
+        });
+    services.observeItems(
+      id,
+      result.history?.items || result.history?.snapshot?.state?.items,
+    );
+    return result;
+  };
+  handle("agent-appearance", () => settings().appearance || null);
+  handle("sync-appearance", (appearance) => {
+    if (!appearance || JSON.stringify(appearance).length > 20000)
+      throw new Error("Invalid appearance preferences.");
+    saveSettings({ appearance });
+    for (const target of windows)
+      if (!target.isDestroyed() && target.agentSessionId)
+        target.webContents.send("muse:appearance", appearance);
+    return { saved: true };
+  });
   handle("diagnose", () => muse.diagnose());
   ipcMain.handle("muse:window-theme", (event, colors) => {
+    const senderWindow = trustedWindow(
+      windows,
+      event.sender,
+      event.senderFrame,
+      securityOptions,
+    );
+    authorizeAgent(senderWindow, "window-theme", [colors], muse);
     if (
       !colors ||
       !/^#[0-9a-f]{6}$/i.test(colors.background) ||
@@ -216,6 +329,7 @@ app.whenReady().then(() => {
   });
   handle("bootstrap", async () => ({
     appVersion: app.getVersion(),
+    storage: services.storageStats(),
     channel: "beta",
     diagnostic: await muse.diagnose(),
     lastWorkspace: settings().workspace || null,
@@ -230,8 +344,82 @@ app.whenReady().then(() => {
     services.saveAttachment(attachment),
   );
   handle("session-media", (id) => services.recoverMedia(String(id)));
+  handle("resolve-media", (file, id) =>
+    services.resolveMedia(String(file), id),
+  );
+  handle("discard-attachment", (id) => services.discardAttachment(String(id)));
+  handle("storage-stats", () => services.storageStats());
+  handle("purge-attachments", async (retained = []) => {
+    if (
+      !Array.isArray(retained) ||
+      retained.some((id) => typeof id !== "string")
+    )
+      throw new Error("Invalid draft attachments.");
+    const unused = services.unusedAttachments(retained);
+    if (!unused.length) return { removed: 0 };
+    const decision = await dialog.showMessageBox(window, {
+      type: "question",
+      buttons: ["Cancel", "Delete unused copies"],
+      defaultId: 0,
+      cancelId: 0,
+      message: `Delete ${unused.length} unused attachment copies?`,
+      detail:
+        "Sent attachments, saved drafts, project files and native conversation history are kept.",
+    });
+    return decision.response === 1
+      ? services.purgeAttachments(
+          retained,
+          unused.map((file) => file.id),
+        )
+      : { cancelled: true };
+  });
+  handle("forget-workspace", (root) => {
+    saveSettings({
+      workspaces: (settings().workspaces || []).filter(
+        (value) => value !== root,
+      ),
+      ...(settings().workspace === root ? { workspace: null } : {}),
+    });
+    return { workspaces: settings().workspaces || [] };
+  });
+  handle("export-session", async (id) => {
+    const result = await observedSession(id);
+    const items =
+      result.history?.items || result.history?.snapshot?.state?.items || [];
+    const title =
+      result.session?.name || result.session?.title || "Muse conversation";
+    const content = [
+      `# ${title}`,
+      `Exported from Muse Desktop ${app.getVersion()}`,
+      ...items
+        .filter((item) => !item.retracted)
+        .map((item) => {
+          const text =
+            item.text ||
+            item.visibleOutput ||
+            item.result?.summary ||
+            (Array.isArray(item.summary)
+              ? item.summary.join("\n")
+              : item.summary) ||
+            "";
+          return `## ${item.kind === "userMessage" ? "You" : item.kind === "agentMessage" ? "Muse" : item.tool || item.kind}\n\n${text}`;
+        }),
+    ].join("\n\n");
+    const selected = await dialog.showSaveDialog(window, {
+      title: "Export conversation",
+      defaultPath: `${
+        String(title)
+          .replace(/[^a-z0-9 _-]/gi, "")
+          .slice(0, 80) || "Muse-conversation"
+      }.md`,
+      filters: [{ name: "Markdown", extensions: ["md"] }],
+    });
+    if (selected.canceled || !selected.filePath) return { cancelled: true };
+    fs.writeFileSync(selected.filePath, content);
+    return { saved: true };
+  });
   handle("open-local", async (value) => {
-    const file = localPath(value);
+    const file = localPath(value, false);
     if (!require("node:fs").existsSync(file))
       throw new Error("This file no longer exists.");
     shell.showItemInFolder(file);
@@ -256,11 +444,17 @@ app.whenReady().then(() => {
       !/^[\w-]{1,100}$/.test(agent.sessionId)
     )
       throw new Error("Invalid agent identity.");
-    await muse.query("session/read", {
+    const record = await muse.query("session/read", {
       sessionId: agent.sessionId,
       excludeItems: true,
     });
-    createWindow(agent);
+    const parent =
+      muse.parents.get(agent.sessionId) ||
+      record.session?.parentSessionId ||
+      "";
+    if (agent.parentSessionId && agent.parentSessionId !== parent)
+      throw new Error("Invalid agent parent identity.");
+    createWindow({ sessionId: agent.sessionId, parentSessionId: parent });
     return { opened: true };
   });
   handle("agent-control", (action, payload) => {
@@ -285,9 +479,10 @@ app.whenReady().then(() => {
   handle("fork-session", (id) =>
     muse.command("session/fork", { sessionId: id }),
   );
-  handle("subscribe-session", (id) =>
-    muse.query("view/subscribe", { sessionId: id }),
-  );
+  handle("subscribe-session", (id) => {
+    muse.pinSession(id);
+    return muse.query("view/subscribe", { sessionId: id });
+  });
   handle("login", async () => {
     try {
       const result = await muse.query("account/loginStart", {
@@ -305,20 +500,25 @@ app.whenReady().then(() => {
   });
   handle("cancel-login", () => muse.query("account/loginCancel"));
   handle("open-external", (url) => shell.openExternal(externalUrl(url)));
-  handle("open-cli", () => openCli());
+  handle("open-cli", (context) => openCli(false, context));
   handle("terminal-start", async (size = {}) => {
     const account = await muse.account();
     if (["apiKey", "envKey"].includes(account.state))
       throw new Error(
         "Sign in with a Muse account before using subscription mode in the terminal.",
       );
-    return terminal.start(
+    const selectedCwd = size.sessionId
+      ? await muse.workspaceForSession(size.sessionId)
+      : size.workspaceRoot || app.getPath("home");
+    const result = terminal.start(
       muse.executable(),
-      muse.workspace || app.getPath("home"),
+      selectedCwd,
       process.env,
       Math.max(2, Math.min(500, size.cols || 100)),
       Math.max(2, Math.min(500, size.rows || 30)),
     );
+    if (!result.reused) terminal.sessionId = size.sessionId || "";
+    return { ...result, selectedCwd, sessionId: terminal.sessionId };
   });
   handle("terminal-write", (data) => terminal.write(data));
   handle("terminal-resize", (cols, rows) => terminal.resize(cols, rows));
@@ -347,6 +547,31 @@ app.whenReady().then(() => {
         : {}),
     });
     if (result.canceled) return null;
+    if ([...new Set(muse.sessions.values())].some((host) => host.inFlight))
+      throw new Error(
+        "Wait for the running operation before changing the CLI.",
+      );
+    for (const id of muse.sessions.keys()) {
+      const snapshot = await muse.query("session/read", {
+        sessionId: id,
+        excludeItems: false,
+      });
+      if (
+        snapshot.session?.activeTurnId ||
+        (
+          snapshot.history?.items ||
+          snapshot.history?.snapshot?.state?.items ||
+          []
+        ).some(
+          (item) =>
+            item.status === "inProgress" &&
+            ["subagent", "workflow", "userShell"].includes(item.kind),
+        )
+      )
+        throw new Error(
+          "Stop running turns and agents before changing the CLI.",
+        );
+    }
     await muse.setBinary(result.filePaths[0]);
     saveSettings({ binary: muse.binary });
     return muse.diagnose();
@@ -464,20 +689,19 @@ app.whenReady().then(() => {
     }
     return muse.startSession(options);
   });
-  handle("resume-session", (id) =>
-    muse.command("session/resume", { sessionId: id, excludeItems: false }),
-  );
-  handle("read-session", (id) =>
-    muse.query("session/read", { sessionId: id, excludeItems: false }),
-  );
-  handle("view-page", (id, cursor) =>
-    muse.query("view/page", {
+  handle("resume-session", (id) => observedSession(id, true));
+  handle("read-session", (id) => observedSession(id));
+  handle("view-page", async (id, cursor) => {
+    const page = await muse.query("view/page", {
       sessionId: id,
       direction: "backward",
       limit: 500,
       ...(cursor ? { cursor } : {}),
-    }),
-  );
+    });
+    for (const event of page.events || [])
+      services.observeItems(id, event.params?.item ? [event.params.item] : []);
+    return page;
+  });
   handle("send-turn", async (payload) => {
     const result = await muse.sendTurn(payload);
     const media = services.rememberMedia(

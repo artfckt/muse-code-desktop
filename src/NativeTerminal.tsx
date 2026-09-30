@@ -11,6 +11,7 @@ import { terminalTheme, type Theme } from "./themes";
 
 export default function NativeTerminal({
   workspace,
+  sessionId,
   visible,
   theme,
   fontSize = 13,
@@ -18,6 +19,7 @@ export default function NativeTerminal({
   onCommandUsed,
 }: {
   workspace: string;
+  sessionId: string;
   visible: boolean;
   theme: Theme;
   fontSize?: number;
@@ -38,6 +40,9 @@ export default function NativeTerminal({
       fitRef.current?.();
     }
   }, [theme, fontSize]);
+  const context = useRef({ sessionId, workspaceRoot: workspace });
+  context.current = { sessionId, workspaceRoot: workspace };
+  const [terminalSession, setTerminalSession] = useState(sessionId);
   const [cwd, setCwd] = useState(workspace);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
@@ -47,12 +52,15 @@ export default function NativeTerminal({
     setError("");
     setExited(false);
     try {
+      const requested = { ...context.current };
       const terminal = terminalRef.current;
       const result = await window.muse.terminalStart({
+        ...requested,
         cols: terminal?.cols || 100,
         rows: terminal?.rows || 30,
       });
       setCwd(result.cwd);
+      setTerminalSession(result.sessionId ?? requested.sessionId);
       if (result.buffer) terminal?.write(result.buffer);
       terminal?.focus();
     } catch (err: any) {
@@ -158,7 +166,9 @@ export default function NativeTerminal({
           className="icon-button"
           title="Open external CLI window"
           onClick={() => {
-            void window.muse.openCli().catch((err) => setError(err.message));
+            void window.muse
+              .openCli(context.current)
+              .catch((err) => setError(err.message));
           }}
         >
           <ExternalLink size={13} />
@@ -172,7 +182,12 @@ export default function NativeTerminal({
           </span>
           <button
             className="secondary-button"
-            disabled={starting || exited}
+            disabled={
+              starting ||
+              exited ||
+              terminalSession !== sessionId ||
+              (!!workspace && cwd !== workspace)
+            }
             onClick={() =>
               void window.muse
                 .terminalWrite(command)
@@ -196,10 +211,11 @@ export default function NativeTerminal({
       {error ? (
         <div className="terminal-notice terminal-error">{error}</div>
       ) : null}
-      {!error && cwd !== workspace && workspace ? (
+      {!error &&
+      (terminalSession !== sessionId || (workspace && cwd !== workspace)) ? (
         <div className="terminal-notice">
-          This terminal remains in its original project. Restart to use the
-          selected workspace.
+          This terminal is still attached to its original conversation folder.
+          Restart to use the selected conversation.
         </div>
       ) : null}
       {exited ? (
@@ -209,8 +225,8 @@ export default function NativeTerminal({
       ) : null}
       <div ref={element} className="terminal-canvas" />
       <div className="terminal-footer">
-        The original Muse Code interface, running locally. Slash commands, trust
-        prompts, approvals, and settings are handled by Muse.
+        Muse Code runs a separate CLI conversation in the selected folder.
+        Commands inserted here do not change the GUI conversation.
       </div>
     </section>
   );

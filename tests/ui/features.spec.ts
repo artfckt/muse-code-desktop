@@ -137,7 +137,7 @@ test("Markdown renders Windows links, GFM, formulas, highlighted code and diagra
           (call: any) => call[0] === "openLocal",
         )[1],
     ),
-  ).toContain("JM3%20Bus%20Stop%20%28Ruby%29");
+  ).toContain("JM3 Bus Stop (Ruby)");
   await expect(page.locator(".markdown table")).toBeVisible();
   await expect(page.locator(".katex-display")).toBeVisible();
   await expect(page.locator(".hljs-keyword")).toContainText("const");

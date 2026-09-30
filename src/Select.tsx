@@ -107,7 +107,7 @@ export function Select({
         aria-label={label}
         aria-expanded={open}
         aria-haspopup="listbox"
-        aria-controls={`${id}-list`}
+        aria-controls={open ? `${id}-list` : undefined}
         aria-activedescendant={open ? `${id}-${focus}` : undefined}
         disabled={disabled}
         onClick={() => {
@@ -135,8 +135,11 @@ export function Select({
           } else if (event.key === "Enter" && open) {
             event.preventDefault();
             choose(focus);
-          } else if (event.key === "Escape" || event.key === "Tab")
+          } else if (event.key === "Escape" && open) {
+            event.preventDefault();
+            event.stopPropagation();
             setOpen(false);
+          } else if (event.key === "Tab") setOpen(false);
           else if (open && event.key === "Home") {
             event.preventDefault();
             setFocus(0);
@@ -187,7 +190,7 @@ export function Select({
               </div>
             ))}
           </div>,
-          document.body,
+          trigger.current?.closest("dialog") || document.body,
         )}
     </>
   );

@@ -99,6 +99,58 @@ const os = require("node:os");
       1,
       "packaged local media protocol decodes persisted image",
     );
+    const blocked = await application.evaluate(
+      async ({ BrowserWindow, app }, media) => {
+        const path = process.getBuiltinModule("node:path");
+        const attacker = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            sandbox: true,
+            nodeIntegration: false,
+            contextIsolation: true,
+          },
+        });
+        await attacker.loadURL(
+          "data:text/html,<title>Isolated security probe</title>",
+        );
+        const probes = await attacker.webContents.executeJavaScript(
+          `Promise.all(${JSON.stringify([media.url, `muse-media://local/?path=${encodeURIComponent(media.path)}`])}.map(async url => { try { const response = await fetch(url); return { status: response.status, bytes: (await response.arrayBuffer()).byteLength }; } catch { return { blocked: true }; } }))`,
+        );
+        attacker.destroy();
+        const unknown = new BrowserWindow({
+          show: false,
+          webPreferences: {
+            preload: path.join(app.getAppPath(), "electron", "preload.cjs"),
+            sandbox: true,
+            nodeIntegration: false,
+            contextIsolation: true,
+          },
+        });
+        await unknown.loadFile(
+          path.join(app.getAppPath(), "dist", "index.html"),
+        );
+        const ipc = await unknown.webContents.executeJavaScript(
+          "window.muse.listSessions().then(() => false, error => /Untrusted/.test(error.message))",
+        );
+        unknown.destroy();
+        return { probes, ipc };
+      },
+      media,
+    );
+    assert.ok(
+      blocked.probes.every((probe) => probe.blocked || probe.status >= 400),
+      "unknown data origin cannot read local media, including copied capabilities",
+    );
+    assert.equal(
+      blocked.ipc,
+      true,
+      "even the same renderer document in an unregistered window cannot call IPC",
+    );
+    const productionPolicy = await window
+      .locator('meta[http-equiv="Content-Security-Policy"]')
+      .getAttribute("content");
+    assert.match(productionPolicy, /script-src 'self';/);
+    assert.match(productionPolicy, /frame-src 'none'/);
     assert.ok(
       await window
         .getByRole("heading", { name: "Make room for your next idea." })
@@ -143,6 +195,44 @@ const os = require("node:os");
       const session = await window.evaluate(() =>
         globalThis.muse.startSession({ permissionProfile: "yolo" }),
       );
+      await window.evaluate(async () => {
+        localStorage.setItem(
+          "private-isolation-marker",
+          "SYNTHETIC_OTHER_SESSION",
+        );
+        const database = await new Promise((resolve, reject) => {
+          const request = indexedDB.open("muse-desktop-drafts", 2);
+          request.onupgradeneeded = () =>
+            request.result.createObjectStore("drafts");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        await new Promise((resolve, reject) => {
+          const transaction = database.transaction("drafts", "readwrite");
+          transaction
+            .objectStore("drafts")
+            .put(
+              {
+                text: "SYNTHETIC_OTHER_SESSION",
+                images: [{ frames: [{ base64Data: "SYNTHETIC_BYTES" }] }],
+              },
+              "isolation-probe",
+            );
+          transaction.oncomplete = resolve;
+          transaction.onerror = reject;
+        });
+        database.close();
+      });
+      await window.evaluate(
+        async ({ id, attachment }) =>
+          globalThis.muse.sendTurn({
+            sessionId: id,
+            text: "Synthetic media isolation check",
+            attachmentIds: [attachment],
+            images: [],
+          }),
+        { id: session.sessionId, attachment: media.id },
+      );
       const opened = application.waitForEvent("window");
       await window.evaluate(
         (sessionId) => globalThis.muse.openAgent({ sessionId }),
@@ -151,6 +241,74 @@ const os = require("node:os");
       const agentWindow = await opened;
       await agentWindow.waitForSelector(".agent-window", { timeout: 15000 });
       assert.equal(await agentWindow.locator(".agent-window h2").count(), 1);
+      assert.equal(
+        await agentWindow.evaluate(() =>
+          globalThis.muse.usage().then(
+            () => false,
+            (error) => /cannot perform/.test(error.message),
+          ),
+        ),
+        true,
+        "agent cannot read global account usage",
+      );
+      assert.equal(
+        await agentWindow.evaluate(() =>
+          globalThis.muse.readSession("another-session").then(
+            () => false,
+            (error) => /cannot perform/.test(error.message),
+          ),
+        ),
+        true,
+        "agent cannot read another session",
+      );
+      assert.ok(await agentWindow.locator(".beta-badge").isVisible());
+      assert.equal(
+        await agentWindow.evaluate(() =>
+          localStorage.getItem("private-isolation-marker"),
+        ),
+        null,
+        "agent storage cannot see main preferences or drafts",
+      );
+      const sharedDraft = await agentWindow.evaluate(async () => {
+        const request = indexedDB.open("muse-desktop-drafts", 2);
+        const database = await new Promise((resolve, reject) => {
+          request.onupgradeneeded = () =>
+            request.result.createObjectStore("drafts");
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+        const values = await new Promise((resolve, reject) => {
+          const read = database
+            .transaction("drafts")
+            .objectStore("drafts")
+            .getAll();
+          read.onsuccess = () => resolve(read.result);
+          read.onerror = () => reject(read.error);
+        });
+        database.close();
+        return values;
+      });
+      assert.deepEqual(
+        sharedDraft,
+        [],
+        "agent IndexedDB cannot read another session's draft bytes",
+      );
+      const agentMedia = await agentWindow.evaluate(async (id) => {
+        const media = await globalThis.muse.sessionMedia(id);
+        const entry = Object.values(media).flat()[0];
+        if (!entry) return 0;
+        return new Promise((resolve) => {
+          const image = new Image();
+          image.onload = () => resolve(image.naturalWidth);
+          image.onerror = () => resolve(0);
+          image.src = entry.url;
+        });
+      }, session.sessionId);
+      assert.equal(
+        agentMedia,
+        1,
+        "agent partition serves only its own granted attachment",
+      );
       await agentWindow.close();
       await window
         .getByRole("button", { name: "Muse CLI Native", exact: true })

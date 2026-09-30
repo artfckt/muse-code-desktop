@@ -9,7 +9,7 @@ test("new conversation supports no folder and a newly chosen project", async ({
   page,
 }) => {
   await expect(page.locator(".window-bar")).toContainText("BETA");
-  await expect(page.locator(".window-bar")).toContainText("0.5.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText("0.6.0-beta.1");
   await expect(
     page.getByRole("button", { name: /Open a project/ }),
   ).toHaveCount(0);
@@ -93,13 +93,11 @@ test("partial subscription usage refreshes without crashing", async ({
 test("file attachments reach the chat payload and custom picker applies color", async ({
   page,
 }) => {
-  await page
-    .locator('input[type="file"]')
-    .setInputFiles({
-      name: "brief.md",
-      mimeType: "text/markdown",
-      buffer: Buffer.from("Build an accessible dashboard"),
-    });
+  await page.locator('input[type="file"]').setInputFiles({
+    name: "brief.md",
+    mimeType: "text/markdown",
+    buffer: Buffer.from("Build an accessible dashboard"),
+  });
   await expect(page.locator(".image-attachments")).toContainText("brief.md");
   await page
     .getByRole("textbox", { name: "Message Muse" })

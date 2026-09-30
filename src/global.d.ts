@@ -2,6 +2,15 @@ export {};
 declare global {
   interface Window {
     muse: {
+      resolveMedia(file: string, sessionId?: string): Promise<string>;
+      discardAttachment(id: string): Promise<any>;
+      purgeAttachments(retained: string[]): Promise<any>;
+      storageStats(): Promise<any>;
+      forgetWorkspace(root: string): Promise<any>;
+      exportSession(id: string): Promise<any>;
+      agentAppearance(): Promise<any>;
+      syncAppearance(appearance: any): Promise<any>;
+      onAppearance(listener: (appearance: any) => void): () => void;
       commands(): Promise<any[]>;
       mcpInventory(): Promise<any>;
       saveAttachment(attachment: {
@@ -31,7 +40,12 @@ declare global {
         background: string;
         foreground: string;
       }): Promise<void>;
-      terminalStart(size: { cols: number; rows: number }): Promise<any>;
+      terminalStart(size: {
+        cols: number;
+        rows: number;
+        sessionId?: string;
+        workspaceRoot?: string;
+      }): Promise<any>;
       terminalWrite(data: string): Promise<any>;
       terminalResize(cols: number, rows: number): Promise<any>;
       terminalRestart(): Promise<any>;
@@ -42,7 +56,10 @@ declare global {
       login(): Promise<any>;
       cancelLogin(): Promise<any>;
       openExternal(url: string): Promise<any>;
-      openCli(): Promise<any>;
+      openCli(context?: {
+        sessionId?: string;
+        workspaceRoot?: string;
+      }): Promise<any>;
       chooseBinary(): Promise<any>;
       pickWorkspace(): Promise<string | null>;
       systemFonts(): Promise<string[]>;

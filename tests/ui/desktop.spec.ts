@@ -182,7 +182,7 @@ test("unknown usage is explicit and runtime settings are accessible", async ({
   page,
 }) => {
   await expect(page.getByText("No usage reported yet")).toBeVisible();
-  await page.getByRole("button", { name: "Settings ⌘ ," }).click();
+  await page.getByRole("button", { name: "Settings Ctrl ," }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Locate CLI" })).toBeVisible();
 });

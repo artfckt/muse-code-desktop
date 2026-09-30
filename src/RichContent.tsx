@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { createContext, useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
@@ -10,16 +10,67 @@ import "katex/dist/katex.min.css";
 export function isLocal(value: string) {
   return /^(?:file:|\/?[a-z]:[\\/]|\/[^/]|\.\.?[\\/])/i.test(value);
 }
-export function mediaUrl(value: string, workspace = "") {
-  if (
-    /^(?:https?:|muse-media:|data:image\/(?:png|jpeg|gif|webp);base64,)/i.test(
-      value,
-    )
-  )
+function decodeMediaPath(value: string) {
+  if (/^https?:|^file:|^data:/i.test(value)) return value;
+  try {
+    return decodeURIComponent(value);
+  } catch {
     return value;
-  let file = value;
-  if (/^\.\.?[\\/]/.test(file) && workspace) file = `${workspace}/${file}`;
-  return `muse-media://local/?path=${encodeURIComponent(file)}`;
+  }
+}
+export const MediaSession = createContext<string | undefined>(undefined);
+export function mediaUrl(value: string, workspace = "") {
+  if (/^(?:https?:|data:image\/(?:png|jpeg|gif|webp);base64,)/i.test(value))
+    return value;
+  if (value.startsWith("muse-media:")) {
+    try {
+      return new URL(value).searchParams.get("path") || "";
+    } catch {
+      return "";
+    }
+  }
+  if (/^\.\.?[\\/]/.test(value) && workspace) return `${workspace}/${value}`;
+  return value;
+}
+// Local file URLs are granted by main, never constructed from Markdown alone.
+export function SafeMedia({ src, kind = "image", ...props }: any) {
+  const sessionId = useContext(MediaSession);
+  const [resolved, setResolved] = useState<string>();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setResolved(undefined);
+    setError("");
+    if (/^https?:|^data:image\/(png|jpeg|gif|webp);base64,/i.test(src || ""))
+      setResolved(src);
+    else if (src)
+      void window.muse
+        .resolveMedia(src, sessionId)
+        .then((url) => {
+          if (alive) setResolved(url);
+        })
+        .catch((error) => {
+          if (alive) setError(error.message);
+        });
+    return () => {
+      alive = false;
+    };
+  }, [src, sessionId]);
+  if (error)
+    return (
+      <span className="media-unavailable" title={error}>
+        Local media unavailable
+      </span>
+    );
+  if (!resolved)
+    return (
+      <span className="media-unavailable" role="status">
+        Loading media…
+      </span>
+    );
+  if (kind === "video") return <video {...props} src={resolved} />;
+  if (kind === "audio") return <audio {...props} src={resolved} />;
+  return <img {...props} src={resolved} />;
 }
 // Muse emits Windows paths containing spaces and nested parentheses. CommonMark
 // requires those destinations to be wrapped in angle brackets or URL encoded.
@@ -46,9 +97,16 @@ export function normalizeLinks(text: string) {
         if (end < 0) continue;
         const destination = part.slice(start, end);
         if (!isLocal(destination)) continue;
-        const encoded = encodeURI(destination.replace(/\\/g, "/")).replace(
-          /[()]/g,
-          (c) => (c === "(" ? "%28" : "%29"),
+        let destinationUrl;
+        try {
+          destinationUrl = destination.startsWith("file:")
+            ? new URL(destination).href
+            : encodeURI(destination.replace(/\\/g, "/"));
+        } catch {
+          continue;
+        }
+        const encoded = destinationUrl.replace(/[()]/g, (c) =>
+          c === "(" ? "%28" : "%29",
         );
         result += part.slice(cursor, match.index) + `${match[1]}(<${encoded}>)`;
         cursor = end + 1;
@@ -185,10 +243,11 @@ export function Markdown({
           const video = !!href && /\.(?:mp4|webm|mov)(?:[?#]|$)/i.test(href);
           if (video)
             return (
-              <video
+              <SafeMedia
+                kind="video"
                 controls
                 preload="metadata"
-                src={mediaUrl(href!, workspace)}
+                src={mediaUrl(decodeMediaPath(href!), workspace)}
               />
             );
           return (
@@ -200,7 +259,9 @@ export function Markdown({
                 if (!href) return;
                 const action = local
                   ? window.muse.openLocal(
-                      /^\.\.?[\\/]/.test(href) ? `${workspace}/${href}` : href,
+                      /^\.\.?[\\/]/.test(href)
+                        ? `${workspace}/${decodeMediaPath(href)}`
+                        : decodeMediaPath(href),
                     )
                   : window.muse.openExternal(href);
                 void action.catch(() => {});
@@ -214,13 +275,15 @@ export function Markdown({
         img: ({ src, alt }) =>
           src ? (
             <figure className="chat-media">
-              <img
-                src={mediaUrl(src, workspace)}
+              <SafeMedia
+                src={mediaUrl(decodeMediaPath(src), workspace)}
                 alt={alt || "Chat image"}
                 loading="lazy"
                 onClick={() => {
                   if (isLocal(src))
-                    void window.muse.openLocal(src).catch(() => {});
+                    void window.muse
+                      .openLocal(mediaUrl(decodeMediaPath(src), workspace))
+                      .catch(() => {});
                 }}
               />
               <figcaption>{alt}</figcaption>
@@ -249,20 +312,22 @@ export function MediaGallery({
   return (
     <div className="media-gallery">
       {media.map((entry, index) => {
-        const source =
-          entry.url ||
-          entry.preview ||
-          (entry.base64Data
-            ? `data:${entry.mediaType};base64,${entry.base64Data}`
-            : mediaUrl(entry.path || "", workspace));
+        const source = entry.base64Data
+          ? `data:${entry.mediaType};base64,${entry.base64Data}`
+          : mediaUrl(entry.path || entry.url || entry.preview || "", workspace);
         const type = entry.mediaType || entry.mime || "";
         return (
           <figure key={entry.id || index} className="chat-media">
             {type.startsWith("video/") ||
             /\.(mp4|webm|mov)$/i.test(entry.path || "") ? (
-              <video controls preload="metadata" src={source} />
+              <SafeMedia
+                kind="video"
+                controls
+                preload="metadata"
+                src={source}
+              />
             ) : type.startsWith("audio/") ? (
-              <audio controls src={source} />
+              <SafeMedia kind="audio" controls src={source} />
             ) : type && !type.startsWith("image/") ? (
               <button
                 className="file-attachment"
@@ -279,7 +344,7 @@ export function MediaGallery({
                 </small>
               </button>
             ) : (
-              <img
+              <SafeMedia
                 src={source}
                 alt={entry.name || "Attached image"}
                 loading="lazy"

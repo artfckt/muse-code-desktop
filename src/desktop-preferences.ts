@@ -22,7 +22,7 @@ export type DesktopPreferences = {
 export const defaultPreferences: DesktopPreferences = {
   font: "DM Sans",
   chatSize: 14,
-  uiSize: 11,
+  uiSize: 12,
   codeSize: 12,
   lineHeight: 1.6,
   compact: true,

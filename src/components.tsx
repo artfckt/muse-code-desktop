@@ -12,7 +12,7 @@ import {
   MessageCircleQuestion,
 } from "lucide-react";
 import { AgentLink } from "./AgentLink";
-import { Markdown, MediaGallery } from "./RichContent";
+import { Markdown, MediaGallery, MediaSession } from "./RichContent";
 export { Markdown } from "./RichContent";
 import type { MuseItem } from "./protocol";
 import { itemText } from "./protocol";
@@ -42,6 +42,13 @@ export function MuseMark({ large = false }: { large?: boolean }) {
   );
 }
 export function TranscriptItem({ item }: { item: MuseItem }) {
+  return (
+    <MediaSession.Provider value={item.sessionId}>
+      <TranscriptContent item={item} />
+    </MediaSession.Provider>
+  );
+}
+function TranscriptContent({ item }: { item: MuseItem }) {
   const [copied, setCopied] = useState(false);
   const [fullOutput, setFullOutput] = useState("");
   const [outputError, setOutputError] = useState("");
@@ -50,6 +57,18 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
   if (item.kind === "userMessage")
     return (
       <article className="user-message">
+        <button
+          className="icon-button copy-user-message"
+          title="Copy message"
+          onClick={() =>
+            void navigator.clipboard.writeText(text).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            })
+          }
+        >
+          {copied ? <Check size={13} /> : <Copy size={13} />}
+        </button>
         <div>
           {item.desktopMedia?.length
             ? text

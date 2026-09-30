@@ -5,6 +5,8 @@ export type Attachment = {
   preview: string;
   path: string;
   text?: string;
+  textTruncated?: boolean;
+  textLength?: number;
   size?: number;
   frames: { mediaType: string; base64Data: string }[];
 };
@@ -24,6 +26,13 @@ export async function prepareAttachment(file: File): Promise<Attachment> {
     throw new Error(
       "Images: up to 10 MB. Videos: up to 50 MB. Documents and source files: up to 25 MB.",
     );
+  if (
+    isDocument &&
+    !/\.(pdf|txt|md|json|csv|ts|tsx|js|jsx|py|c|cpp|h|cs|go|rs|java|css|html|yaml|yml|xml|log|sql|sh|docx|xlsx|zip)$/i.test(
+      file.name,
+    )
+  )
+    throw new Error("Unsupported document type.");
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result));
@@ -104,9 +113,29 @@ export async function prepareAttachment(file: File): Promise<Attachment> {
     name: file.name,
     mediaType: saved.mediaType || file.type,
     text: saved.text,
+    textTruncated: saved.textTruncated,
+    textLength: saved.textLength,
     size: saved.size || file.size,
     preview: saved.url,
     path: saved.path,
     frames,
   };
+}
+
+// Keep the total inline context bounded; every attachment still includes its
+// complete local path for Muse's native file tools.
+export function attachmentContext(attachments: Attachment[]) {
+  let remaining = 200000;
+  return attachments
+    .filter((file) => !file.mediaType.startsWith("image/"))
+    .map((file) => {
+      if (file.mediaType.startsWith("video/"))
+        return `\nVideo: ${file.name}. Four sampled frames are attached in chronological order. Full video file: ${file.path}`;
+      const excerpt = file.text?.slice(0, remaining) || "";
+      remaining -= excerpt.length;
+      const shortened =
+        file.textTruncated || excerpt.length < (file.text?.length || 0);
+      return `\nAttached file: ${file.name}\nLocal path: ${file.path}${shortened ? "\nExcerpt shortened to fit message context; use the native tools to read the full local file." : ""}${excerpt ? `\n<attached-file name=${JSON.stringify(file.name)}>\n${excerpt}\n</attached-file>` : "\nRead this local file using the native tools if needed."}`;
+    })
+    .join("");
 }
