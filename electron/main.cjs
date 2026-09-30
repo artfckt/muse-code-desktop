@@ -122,6 +122,23 @@ app.whenReady().then(() => {
   const handle = (name, fn) =>
     ipcMain.handle(`muse:${name}`, (_event, ...args) => fn(...args));
   handle("diagnose", () => muse.diagnose());
+  handle("window-theme", (colors) => {
+    if (
+      !colors ||
+      !/^#[0-9a-f]{6}$/i.test(colors.background) ||
+      !/^#[0-9a-f]{6}$/i.test(colors.foreground)
+    )
+      throw new Error("Invalid window theme colors.");
+    if (window && !window.isDestroyed()) {
+      window.setBackgroundColor(colors.background);
+      if (process.platform === "win32")
+        window.setTitleBarOverlay({
+          color: colors.background,
+          symbolColor: colors.foreground,
+          height: 42,
+        });
+    }
+  });
   handle("bootstrap", async () => ({
     diagnostic: await muse.diagnose(),
     lastWorkspace: settings().workspace || null,

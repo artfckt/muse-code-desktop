@@ -3,6 +3,7 @@ import {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -49,6 +50,13 @@ import {
   type MuseEvent,
   type MuseItem,
 } from "./protocol";
+import {
+  applyTheme,
+  readThemePreference,
+  resolveTheme,
+  saveThemePreference,
+  themes,
+} from "./themes";
 const NativeTerminal = lazy(() => import("./NativeTerminal"));
 
 const efforts = [
@@ -115,6 +123,28 @@ function timeAgo(value: string) {
 }
 
 export default function App() {
+  const [themePreference, setThemePreference] = useState(readThemePreference);
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia("(prefers-color-scheme: dark)").matches,
+  );
+  const theme = resolveTheme(themePreference, systemDark);
+  useEffect(() => {
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = () => setSystemDark(media.matches);
+    media.addEventListener("change", update);
+    update();
+    return () => media.removeEventListener("change", update);
+  }, []);
+  useLayoutEffect(() => {
+    applyTheme(theme);
+    saveThemePreference(themePreference);
+    void window.muse
+      .setWindowTheme?.({
+        background: theme.colors.bg,
+        foreground: theme.colors.text,
+      })
+      .catch(() => {});
+  }, [theme, themePreference]);
   const [diagnostic, setDiagnostic] = useState<any>(null);
   const [workspace, setWorkspace] = useState("");
   const [sessions, setSessions] = useState<any[]>([]);
@@ -859,6 +889,7 @@ export default function App() {
             <NativeTerminal
               workspace={workspace}
               visible={tab === "terminal"}
+              theme={theme}
             />
           </Suspense>
         ) : null}
@@ -1496,6 +1527,61 @@ export default function App() {
                 <p>
                   Connected to the same Muse Code installation as your terminal.
                 </p>
+                <fieldset className="appearance-settings">
+                  <legend>Appearance</legend>
+                  <p>
+                    Choose a palette. Your preference is saved on this computer.
+                  </p>
+                  <div className="theme-grid">
+                    {themes.map((option) => (
+                      <label className="theme-choice" key={option.id}>
+                        <input
+                          type="radio"
+                          name="theme"
+                          value={option.id}
+                          checked={themePreference === option.id}
+                          onChange={() => setThemePreference(option.id)}
+                        />
+                        <span
+                          className="theme-swatch"
+                          aria-hidden="true"
+                          style={{
+                            background: option.colors.bg,
+                            borderColor: option.colors.elevated,
+                          }}
+                        >
+                          <i style={{ background: option.colors.panel }} />
+                          <i style={{ background: option.colors.accent }} />
+                          <i style={{ background: option.colors.mint }} />
+                        </span>
+                        <span>
+                          <b>{option.name}</b>
+                          <small>{option.description}</small>
+                        </span>
+                        <Check
+                          className="theme-check"
+                          size={13}
+                          aria-hidden="true"
+                        />
+                      </label>
+                    ))}
+                  </div>
+                  <label className="system-theme-choice">
+                    <input
+                      type="radio"
+                      name="theme"
+                      value="system"
+                      checked={themePreference === "system"}
+                      onChange={() => setThemePreference("system")}
+                    />
+                    <span>
+                      <b>Follow system</b>
+                      <small>
+                        Use Muse Dark or Paper with your Windows appearance.
+                      </small>
+                    </span>
+                  </label>
+                </fieldset>
                 <div className="setting-row">
                   <div>
                     <b>Muse Code runtime</b>

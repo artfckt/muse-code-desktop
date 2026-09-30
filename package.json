@@ -1,6 +1,6 @@
 {
   "name": "muse-code-desktop",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Desktop client for Muse Code that uses the user's existing Muse Code subscription via muse login.",
   "main": "electron/main.cjs",

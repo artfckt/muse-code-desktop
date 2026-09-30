@@ -42,7 +42,7 @@ test("Windows installation is discoverable even when GUI PATH is stale", () => {
   );
 });
 test("macOS/Linux installation is discoverable outside GUI PATH", () => {
-  const exe = "/user/.local/bin/muse";
+  const exe = path.join("/user", ".local", "bin", "muse");
   assert.equal(
     findMuseBinary({
       platform: "darwin",

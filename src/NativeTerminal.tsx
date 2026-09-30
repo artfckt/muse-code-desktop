@@ -7,17 +7,26 @@ import {
 } from "lucide-react";
 import type { Terminal } from "@xterm/xterm";
 import "@xterm/xterm/css/xterm.css";
+import { terminalTheme, type Theme } from "./themes";
 
 export default function NativeTerminal({
   workspace,
   visible,
+  theme,
 }: {
   workspace: string;
   visible: boolean;
+  theme: Theme;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<(() => void) | null>(null);
+  const latestTheme = useRef(theme);
+  latestTheme.current = theme;
+  useEffect(() => {
+    if (terminalRef.current)
+      terminalRef.current.options.theme = terminalTheme(theme);
+  }, [theme]);
   const [cwd, setCwd] = useState(workspace);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(true);
@@ -53,20 +62,7 @@ export default function NativeTerminal({
           fontFamily: 'Consolas, "SFMono-Regular", monospace',
           scrollback: 10000,
           allowProposedApi: false,
-          theme: {
-            background: "#111315",
-            foreground: "#cdd6cd",
-            cursor: "#eebd9a",
-            selectionBackground: "#eebd9a33",
-            black: "#191e1c",
-            red: "#d49885",
-            green: "#a7bfa4",
-            yellow: "#dec196",
-            blue: "#96b5c0",
-            magenta: "#bea7c3",
-            cyan: "#9cbbb3",
-            white: "#e2e6db",
-          },
+          theme: terminalTheme(latestTheme.current),
         });
         const fit = new FitAddon();
         terminal.loadAddon(fit);

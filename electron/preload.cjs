@@ -9,6 +9,7 @@ const subscribe = (channel) => (listener) => {
   return () => ipcRenderer.removeListener(`muse:${channel}`, handler);
 };
 contextBridge.exposeInMainWorld("muse", {
+  setWindowTheme: invoke("window-theme"),
   bootstrap: invoke("bootstrap"),
   diagnose: invoke("diagnose"),
   login: invoke("login"),

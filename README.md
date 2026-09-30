@@ -1,4 +1,4 @@
-# Muse Desktop 0.2
+# Muse Desktop 0.3
 
 A modern desktop workspace powered by your installed **Muse Code**, using the official Muse SDK. Windows is the primary packaged target.
 
@@ -26,11 +26,17 @@ Project rules, skills, hooks, MCP configuration, sandboxing and approval policy 
 
 ## Install on Windows
 
-1. Download the installer from the latest successful **Muse Desktop Windows** run in [GitHub Actions](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml), under the `muse-code-desktop-windows` artifact.
+1. Download the Windows x64 installer from [the latest release](https://github.com/artfckt/muse-code-desktop/releases/latest). Development builds are also available in the **Muse Desktop Windows** [GitHub Actions artifacts](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml).
 2. Install Muse Code from the [official documentation](https://dev.meta.ai/docs/muse-code) if it is not installed.
 3. Open Muse Desktop, connect your account if necessary and select your project folder.
 
 The app searches the official installation locations as well as `PATH`. If your CLI is installed elsewhere, use **Settings → Locate CLI**. The CLI is an external prerequisite and is not bundled in the installer. Account-dependent features require an eligible Muse account.
+
+## Make it your own
+
+Open **Settings → Appearance** to choose **Muse Dark**, **Paper**, **Midnight**, **Forest**, **Rose**, or **Graphite**. Each palette updates the whole workspace, Windows title bar, and native terminal immediately. Your selection is saved locally and restored on the next launch. **Follow system** switches between Muse Dark and Paper with your Windows appearance setting. Changing palettes preserves the active terminal session and its output.
+
+![Muse Desktop appearance settings in the Paper theme](docs/appearance-preview.png)
 
 ## Development
 

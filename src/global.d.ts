@@ -2,6 +2,10 @@ export {};
 declare global {
   interface Window {
     muse: {
+      setWindowTheme(colors: {
+        background: string;
+        foreground: string;
+      }): Promise<void>;
       terminalStart(size: { cols: number; rows: number }): Promise<any>;
       terminalWrite(data: string): Promise<any>;
       terminalResize(cols: number, rows: number): Promise<any>;

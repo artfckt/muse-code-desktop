@@ -41,6 +41,8 @@ window.testBridge = {
   },
 };
 window.muse = {
+  setWindowTheme: async (colors) =>
+    window.testBridge.calls.push(["setWindowTheme", colors]),
   terminalStart: async () => (
     window.testBridge.calls.push(["terminalStart"]),
     {

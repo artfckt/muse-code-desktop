@@ -53,6 +53,27 @@ const os = require("node:os");
     );
     const diagnostic = await window.evaluate(() => globalThis.muse.diagnose());
     assert.equal(typeof diagnostic.cliInstalled, "boolean");
+    await window.getByRole("button", { name: /^Settings/ }).click();
+    await window.locator('.theme-choice:has(input[value="paper"])').click();
+    assert.equal(
+      await window.locator("html").getAttribute("data-theme"),
+      "paper",
+    );
+    await window.getByRole("button", { name: "Close dialog" }).click();
+    await window.evaluate(() =>
+      globalThis.muse.setWindowTheme({
+        background: "#f7f3eb",
+        foreground: "#302b26",
+      }),
+    );
+    await application.evaluate(({ BrowserWindow }) => {
+      const window = BrowserWindow.getAllWindows()[0];
+      if (window.getBackgroundColor().toLowerCase() !== "#f7f3eb")
+        throw new Error("Native window theme was not applied");
+    });
+    await window.getByRole("button", { name: /^Settings/ }).click();
+    await window.locator('.theme-choice:has(input[value="muse"])').click();
+    await window.getByRole("button", { name: "Close dialog" }).click();
     if (process.env.MUSE_TEST_BINARY) {
       await window
         .getByRole("button", { name: "Muse CLI Native", exact: true })
@@ -80,13 +101,20 @@ const os = require("node:os");
           const pty = createRequire(
             path.join(app.getAppPath(), "package.json"),
           )("node-pty");
-          const terminal = pty.spawn(process.execPath, ["--version"], {
-            name: "xterm-256color",
-            cols: 80,
-            rows: 24,
-            cwd: app.getPath("home"),
-            env: { ...process.env, ELECTRON_RUN_AS_NODE: "1" },
-          });
+          const windows = process.platform === "win32";
+          // Keep the shell alive until ConPTY has delivered its output.
+          // A short-lived --version process may exit before Windows flushes it.
+          const terminal = pty.spawn(
+            windows ? "cmd.exe" : "/bin/sh",
+            windows ? ["/d", "/q"] : [],
+            {
+              name: "xterm-256color",
+              cols: 80,
+              rows: 24,
+              cwd: app.getPath("home"),
+              env: { ...process.env },
+            },
+          );
           let output = "";
           const timer = setTimeout(() => {
             terminal.kill();
@@ -94,16 +122,22 @@ const os = require("node:os");
           }, 10000);
           terminal.onData((data) => {
             output += data;
+            if (output.includes("MUSE_PTY_OK")) {
+              clearTimeout(timer);
+              terminal.kill();
+              resolve(output);
+            }
           });
           terminal.onExit(() => {
             clearTimeout(timer);
             resolve(output);
           });
+          terminal.write(`echo MUSE_PTY_OK${windows ? "\r" : "\n"}`);
         }),
     );
     assert.match(
       String(terminalOutput),
-      /v\d+\./,
+      /MUSE_PTY_OK/,
       "Electron can load the packaged native PTY binding",
     );
     console.log(
