@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Select } from "./Select";
 import {
@@ -13,6 +14,34 @@ export function DesktopSettings({
   value: DesktopPreferences;
   onChange: (value: DesktopPreferences) => void;
 }) {
+  const [installedFonts, setInstalledFonts] = useState<string[]>([]);
+  const [fontFilter, setFontFilter] = useState("");
+  const [fontStatus, setFontStatus] = useState("Loading installed fonts…");
+  useEffect(() => {
+    let alive = true;
+    void window.muse
+      .systemFonts()
+      .then((list) => {
+        if (alive) {
+          setInstalledFonts(list);
+          setFontStatus(`${list.length} installed fonts`);
+        }
+      })
+      .catch(() => {
+        if (alive)
+          setFontStatus("Installed fonts unavailable on this computer");
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const fontOptions = [
+    ...new Set([value.font, ...fonts, ...installedFonts]),
+  ].filter(
+    (font) =>
+      font === value.font ||
+      font.toLowerCase().includes(fontFilter.toLowerCase()),
+  );
   const update = (patch: Partial<DesktopPreferences>) =>
     onChange({ ...value, ...patch });
   return (
@@ -24,9 +53,17 @@ export function DesktopSettings({
           <Select
             label="Interface font"
             value={value.font}
-            options={fonts.map((font) => ({ value: font, label: font }))}
+            options={fontOptions.map((font) => ({ value: font, label: font }))}
             onChange={(font) => update({ font })}
           />
+          <input
+            className="font-search"
+            aria-label="Search installed fonts"
+            placeholder="Search Windows / system fonts…"
+            value={fontFilter}
+            onChange={(e) => setFontFilter(e.target.value)}
+          />
+          <small className="settings-hint">{fontStatus}</small>
         </label>
         {(
           [
@@ -75,8 +112,21 @@ export function DesktopSettings({
               }
             </span>
             <div className="color-field">
-              <i
-                style={{ background: value.colors[name] || `var(--${name})` }}
+              <input
+                type="color"
+                aria-label={`Choose ${name} color`}
+                value={
+                  /^#[\da-f]{6}$/i.test(value.colors[name] || "")
+                    ? value.colors[name]
+                    : getComputedStyle(document.documentElement)
+                        .getPropertyValue(`--${name}`)
+                        .trim() || "#000000"
+                }
+                onChange={(event) =>
+                  update({
+                    colors: { ...value.colors, [name]: event.target.value },
+                  })
+                }
               />
               <input
                 aria-label={`${name} color`}
@@ -173,11 +223,14 @@ export function DesktopSettings({
         </label>
       </div>
       <h3>Layout & behavior</h3>
+      <small className="settings-hint">
+        Select and copy text inside conversations. Navigation stays compact and
+        draggable.
+      </small>
       {(
         [
           ["compact", "Compact workspace and activity rows"],
           ["autoCollapse", "Hide completed activity in the conversation"],
-          ["selectText", "Allow selecting interface and response text"],
           ["animations", "Animate running and completed chats"],
           ["notifications", "Desktop notifications"],
           ["notificationSound", "Notification sounds"],

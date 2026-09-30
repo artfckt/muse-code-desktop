@@ -44,6 +44,9 @@ declare global {
       openExternal(url: string): Promise<any>;
       openCli(): Promise<any>;
       chooseBinary(): Promise<any>;
+      pickWorkspace(): Promise<string | null>;
+      systemFonts(): Promise<string[]>;
+      agentAvailable(id: string): Promise<boolean>;
       chooseWorkspace(): Promise<any>;
       connectWorkspace(cwd: string): Promise<any>;
       listSessions(): Promise<any>;

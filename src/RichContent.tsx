@@ -263,6 +263,21 @@ export function MediaGallery({
               <video controls preload="metadata" src={source} />
             ) : type.startsWith("audio/") ? (
               <audio controls src={source} />
+            ) : type && !type.startsWith("image/") ? (
+              <button
+                className="file-attachment"
+                onClick={() =>
+                  void window.muse.openLocal(entry.path).catch(() => {})
+                }
+              >
+                <span>FILE</span>
+                <b>{entry.name || "Attached file"}</b>
+                <small>
+                  {entry.size
+                    ? `${Math.ceil(entry.size / 1024)} KB`
+                    : "Open local file"}
+                </small>
+              </button>
             ) : (
               <img
                 src={source}

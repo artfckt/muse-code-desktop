@@ -24,7 +24,7 @@ export const defaultPreferences: DesktopPreferences = {
   chatSize: 14,
   uiSize: 11,
   codeSize: 12,
-  lineHeight: 1.75,
+  lineHeight: 1.6,
   compact: true,
   animations: true,
   notifications: true,
@@ -84,7 +84,11 @@ export function normalizePreferences(
     if (typeof value === "number" && Number.isFinite(value))
       (result as any)[name] = Math.min(max, Math.max(min, value));
   }
-  if (fonts.includes(raw.font || "")) result.font = raw.font!;
+  if (
+    typeof raw.font === "string" &&
+    /^[\p{L}\p{N} ._()\-]{1,120}$/u.test(raw.font)
+  )
+    result.font = raw.font!;
   if (raw.sendKey === "ctrl-enter") result.sendKey = raw.sendKey;
   if (raw.followUp === "steer") result.followUp = raw.followUp;
   if (["standard", "readonly", "yolo"].includes(raw.defaultPermissions || ""))
@@ -128,6 +132,17 @@ export function applyPreferences(value: DesktopPreferences) {
   root.style.setProperty("--ui-size", `${value.uiSize}px`);
   root.style.setProperty("--code-size", `${value.codeSize}px`);
   root.style.setProperty("--chat-line-height", String(value.lineHeight));
+  const customAccent = value.colors.accent;
+  if (/^#[\da-f]{6}$/i.test(customAccent || "")) {
+    const rgb = [1, 3, 5]
+      .map((i) => parseInt(customAccent.slice(i, i + 2), 16) / 255)
+      .map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+    const luminance = rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
+    root.style.setProperty(
+      "--on-accent",
+      luminance > 0.179 ? "#171717" : "#ffffff",
+    );
+  }
   for (const [name, color] of Object.entries(value.colors))
     if (/^#[\da-f]{6}$/i.test(color))
       root.style.setProperty(`--${name}`, color);

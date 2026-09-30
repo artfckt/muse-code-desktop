@@ -11,6 +11,7 @@ import {
   X,
   MessageCircleQuestion,
 } from "lucide-react";
+import { AgentLink } from "./AgentLink";
 import { Markdown, MediaGallery } from "./RichContent";
 export { Markdown } from "./RichContent";
 import type { MuseItem } from "./protocol";
@@ -51,7 +52,10 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
       <article className="user-message">
         <div>
           {item.desktopMedia?.length
-            ? text.replace(/\[Image #\d+\]/g, "").trim()
+            ? text
+                .replace(/\[Image #\d+\]/g, "")
+                .replace(/\n(?:Attached file:|Video:)[\s\S]*$/, "")
+                .trim()
             : text}
         </div>
         {item.desktopMedia?.length ? (
@@ -131,20 +135,13 @@ export function TranscriptItem({ item }: { item: MuseItem }) {
         <ChevronDown size={13} />
       </summary>
       <div className="tool-detail">
-        {item.childSessionId ? (
-          <button
-            className="text-button"
-            onClick={() =>
-              void window.muse
-                .openAgent({
-                  sessionId: item.childSessionId,
-                  parentSessionId: item.sessionId,
-                })
-                .catch((err) => setOutputError(err.message))
-            }
-          >
-            Open agent conversation <ExternalLink size={12} />
-          </button>
+        {item.childSessionId && item.status === "inProgress" ? (
+          <AgentLink
+            id={item.childSessionId}
+            parent={item.sessionId}
+            label="Open agent conversation"
+            onError={setOutputError}
+          />
         ) : null}
         {item.modelVisibleContent?.filter(
           (part: any) =>

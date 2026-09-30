@@ -7,6 +7,7 @@ import {
   Check,
   Loader2,
 } from "lucide-react";
+import { AgentLink } from "./AgentLink";
 import { TranscriptItem } from "./components";
 import { itemText, type MuseItem } from "./protocol";
 
@@ -146,7 +147,26 @@ function ActivityGroup({
         <span>
           {items.length} activity {items.length === 1 ? "step" : "steps"}
         </span>
-        <small>{running ? "Running" : "View details"}</small>
+        <span className="activity-preview">
+          {[
+            ...new Set(
+              items.map(
+                (item) =>
+                  item.tool ||
+                  (item.kind === "userShell"
+                    ? "Shell"
+                    : item.kind === "reasoning"
+                      ? "Reasoning"
+                      : item.kind === "subagent"
+                        ? item.role || "Agent"
+                        : item.kind),
+              ),
+            ),
+          ]
+            .slice(0, 3)
+            .join(" · ")}
+        </span>
+        <small>{running ? "Running" : open ? "Collapse" : "Details"}</small>
         <ChevronDown size={13} className={open ? "rotate" : ""} />
       </button>
       {open ? (
@@ -293,24 +313,40 @@ export function AgentsPanel({
             <span className={item.status === "inProgress" ? "running" : ""}>
               {item.controlStatus || item.status}
             </span>
-            {item.childSessionId ? (
-              <button
-                className="icon-button"
-                aria-label={`Open ${item.role || "agent"} separately`}
-                onClick={() =>
-                  void window.muse
-                    .openAgent({
-                      sessionId: item.childSessionId,
-                      parentSessionId: sessionId,
-                    })
-                    .catch((err) => onError(err.message))
-                }
-              >
-                <ExternalLink size={14} />
-              </button>
+            {item.childSessionId && item.status === "inProgress" ? (
+              <AgentLink
+                id={item.childSessionId}
+                parent={sessionId}
+                label={`Open ${item.role || "agent"} separately`}
+                onError={onError}
+              />
             ) : null}
           </header>
           <p>{item.objective || itemText(item)}</p>
+          <dl className="agent-metadata">
+            {[
+              ["Agent", item.subagentId],
+              ["Session", item.childSessionId],
+              ["Path", item.agentPath],
+              ["Model", item.modelId || item.model?.modelId],
+              ["Provider", item.providerId || item.model?.providerId],
+              ["Started", item.startedAt || item.createdAt],
+              [
+                "Duration",
+                item.durationMs != null
+                  ? `${(item.durationMs / 1000).toFixed(1)}s`
+                  : null,
+              ],
+              ["State", item.controlStatus || item.status],
+            ]
+              .filter(([, value]) => value != null && value !== "")
+              .map(([name, value]) => (
+                <div key={name}>
+                  <dt>{name}</dt>
+                  <dd title={String(value)}>{String(value)}</dd>
+                </div>
+              ))}
+          </dl>
           {item.durationMs != null ? (
             <small>
               {(item.durationMs / 1000).toFixed(1)}s ·{" "}

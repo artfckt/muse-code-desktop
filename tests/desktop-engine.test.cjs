@@ -235,6 +235,7 @@ test(
     const events = [];
     const engine = new DesktopEngine({
       binary: process.env.MUSE_TEST_BINARY,
+      standaloneRoot: path.join(root, "standalone"),
       home: root,
       env: {
         ...process.env,
@@ -272,6 +273,19 @@ test(
         events.filter((event) => event.method === "turn/completed").length,
         2,
       );
+      const standalone = await engine.startSession({
+        noFolder: true,
+        permissionProfile: "yolo",
+      });
+      assert.equal(standalone.noFolder, true);
+      const nativeRoot = engine.hostFor(standalone.sessionId).workspace;
+      assert.notEqual(nativeRoot, root);
+      const standaloneRead = await engine.query("session/read", {
+        sessionId: standalone.sessionId,
+        excludeItems: true,
+      });
+      assert.equal(standaloneRead.session.workspaceRoot, "");
+      assert.equal(standaloneRead.session.noFolder, true);
       const old = engine.hostFor(one.sessionId);
       await engine.setPermissions(one.sessionId, "readonly", "onRequest");
       assert.notEqual(engine.hostFor(one.sessionId), old);
@@ -294,3 +308,93 @@ test(
     }
   },
 );
+
+test("usage refresh reads every chat host and tolerates one failed host", async () => {
+  const { engine, hosts } = fixture();
+  await engine.startSession();
+  await engine.startSession();
+  let reads = 0;
+  hosts[0].query = async () => {
+    reads++;
+    throw new Error("Control disconnected");
+  };
+  hosts[1].query = async () => {
+    reads++;
+    return { usage: { observedAtMs: 200, window: { usedPercent: 12 } } };
+  };
+  hosts[2].query = async () => {
+    reads++;
+    return { usage: { observedAtMs: 300, weekly: { usedPercent: 27 } } };
+  };
+  const result = await engine.query("usage/read");
+  assert.equal(reads, 3);
+  assert.equal(result.usage.weekly.usedPercent, 27);
+  assert.equal(result.sourceCount, 3);
+  assert.ok(result.checkedAtMs);
+});
+
+test("no-folder chats use isolated directories and survive history projection", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "muse-standalone-"));
+  const { engine, hosts } = fixture();
+  engine.options.standaloneRoot = root;
+  try {
+    await engine.startSession({ noFolder: true });
+    await engine.startSession({ noFolder: true });
+    assert.notEqual(hosts[1].workspace, hosts[2].workspace);
+    assert.ok(fs.statSync(hosts[1].workspace).isDirectory());
+    hosts[0].query = async () => ({
+      sessions: [
+        { sessionId: "standalone", workspaceRoot: hosts[1].workspace },
+        { sessionId: "project", workspaceRoot: path.dirname(root) },
+      ],
+    });
+    const rows = (await engine.listSessions()).sessions;
+    assert.equal(rows[0].workspaceRoot, "");
+    assert.equal(rows[0].noFolder, true);
+    assert.equal(rows[1].noFolder, undefined);
+  } finally {
+    await engine.close();
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("document attachments retain safe names, text and history without serving active content", async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "muse-document-"));
+  try {
+    const services = new DesktopServices(root, {});
+    const file = services.saveAttachment({
+      name: "../../project/brief.md",
+      mediaType: "text/markdown",
+      base64Data: Buffer.from("# Project brief\nBuild a dashboard").toString(
+        "base64",
+      ),
+    });
+    assert.equal(path.dirname(file.path), services.directory);
+    assert.ok(file.text.includes("Build a dashboard"));
+    services.rememberMedia("chat", "turn", [file.id]);
+    assert.equal(
+      new DesktopServices(root, {}).sessionMedia("chat").turn[0].id,
+      file.id,
+    );
+    const html = services.saveAttachment({
+      name: "view.html",
+      mediaType: "text/html",
+      base64Data: Buffer.from("<script>alert(1)</script>").toString("base64"),
+    });
+    assert.equal(
+      (await services.serveMedia(new Request(html.url))).status,
+      415,
+    );
+    assert.throws(
+      () =>
+        services.saveAttachment({
+          name: "large.pdf",
+          mediaType: "application/pdf",
+          base64Data: "A".repeat(36 * 1024 * 1024),
+        }),
+      /too large/,
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

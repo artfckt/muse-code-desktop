@@ -81,11 +81,11 @@ test("an open terminal recolors without restarting its native session", async ({
   await page.getByRole("button", { name: "Close dialog" }).click();
   await expect(page.locator(".xterm-viewport")).toHaveCSS(
     "background-color",
-    "rgb(251, 242, 242)",
+    "rgb(25, 20, 30)",
   );
   await expect(page.locator(".xterm-fg-2").first()).toHaveCSS(
     "color",
-    "rgb(70, 105, 93)",
+    "rgb(171, 205, 191)",
   );
   await expect(page.locator(".xterm-rows")).toContainText(
     "Muse Code native terminal fixture",
@@ -105,7 +105,7 @@ test("an open terminal recolors without restarting its native session", async ({
           .filter((call: any) => call[0] === "setWindowTheme")
           .at(-1)[1],
     ),
-  ).toEqual({ background: "#fbf2f2", foreground: "#3f2d36" });
+  ).toEqual({ background: "#19141e", foreground: "#eee7f2" });
 });
 
 test("unknown stored themes fall back safely", async ({ page }) => {

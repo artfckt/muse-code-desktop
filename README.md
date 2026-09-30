@@ -1,76 +1,113 @@
-# Muse Desktop 0.4
+# Muse Desktop
 
-A modern desktop workspace powered by your installed **Muse Code**, using the official Muse SDK. Windows is the primary packaged target.
+A focused desktop workspace for **Muse Code**. Chat with the same native engine you use in the CLI, keep projects and conversations together, and follow tools, approvals and agents without leaving the app.
 
-![Muse Desktop welcome](docs/desktop-preview.png)
+**Current version: 0.5.0-beta.1 · Beta · Windows x64**
 
-## Your Muse account, already connected
+[Download the beta installer](https://github.com/artfckt/muse-code-desktop/releases/tag/v0.5.0-beta.1) · [Muse Code documentation](https://dev.meta.ai/docs/muse-code) · [Windows build checks](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml)
 
-If you are signed in to the Muse CLI, open the desktop app and it reuses that login through the CLI’s own credential backend. Credentials are never copied into the renderer or stored in desktop settings.
+![Muse Desktop beta workspace](docs/conversation-preview.png)
 
-If you are not signed in, choose **Sign in with Muse Code**. The app requests a native device code and opens the verification page in your browser. Older CLI versions fall back to a visible native sign-in terminal. You can also sign in from the integrated **Muse CLI** tab, then refresh the account.
+## Get started
 
-This desktop targets Muse account authentication. It removes an ambient `META_API_KEY` when starting Muse and blocks GUI turns if the CLI reports stored API-key authentication. A signed-in account does not itself guarantee subscription entitlement; Muse’s service controls access and billing.
+1. Install [Muse Code](https://dev.meta.ai/docs/muse-code) and sign in with `muse login`.
+2. Download `Muse-Desktop-0.5.0-beta.1-Windows-x64.exe` from the beta release and run the installer.
+3. Open Muse Desktop. It reuses the CLI's existing account on this computer. If needed, choose **Sign in with Muse Code** inside the app.
+4. Select **New conversation**, choose a project folder or **No folder**, and start chatting.
 
-## Your conversations and native engine
+The Muse CLI is an external prerequisite; the installer does not bundle it. The app checks the usual installation locations as well as `PATH`. Use **Settings → Locate CLI** for a custom installation. An eligible Muse account is required for account-dependent features. This beta installer is unsigned.
 
-- **Workspaces:** all retained chats grouped beneath their workspace, compact collapsible groups, running/done indicators, and resizable left and right sidebars. You can switch projects while other chats continue running.
-- **Conversation:** streamed Markdown with GFM tables/task lists, syntax highlighting, math and Mermaid diagrams, clickable Windows paths, images and playable video. Completed activity collapses by default so the answer remains visible. Expanded activity and the Activity tab retain the details.
-- **Composer:** custom themed model, reasoning, permission and queue/steer menus; image/video attachments; slash-command autocomplete combining native built-ins and the current project's skills.
-- **Activity:** compact native tool, shell, reasoning, workflow and agent output, with session/model/provider, branch, context occupancy, token usage and turn duration when reported by Muse.
-- **Agents:** native child conversations, objectives, state and results; message/follow-up/interrupt/resume controls; each child's live transcript opens in its own desktop window. `/agents your task` asks Muse to delegate through native subagents.
-- **Account:** your account and observed subscription usage together in the right sidebar. Completion/failure and approval notifications can bring you back to the relevant conversation.
-- **Muse CLI:** the original interactive CLI embedded in the desktop window through a real PTY. Use its complete native command set, trust prompts, configuration and features that do not have a dedicated GUI control. The terminal stays alive when switching tabs.
+Muse Desktop is an independent client, not an official Meta application. Authentication and execution remain with the installed Muse Code runtime through the official `@muse-code/sdk`.
 
-The GUI and terminal are separate native sessions. They share the CLI’s account, configuration and retained history. An active session owned by another Muse process is displayed read-only until that process releases it.
+## A compact workspace
 
-Project rules, skills, hooks and MCP configuration are loaded by Muse. The MCP panel shows configured server names, transports and enabled state without exposing environment variables, headers or credentials. Its native `/mcp` manager provides live status and tools.
+- **Projects and chats:** compact, collapsible project groups, search, active chat indicators and clear loading states.
+- **Conversations:** streaming Markdown, code highlighting, tables, formulas, diagrams, copyable response text and a **Jump to latest** button for long histories. Text selection stays in conversations and editable fields.
+- **Activity:** expandable tool summaries and session details pinned above the scrolling feed, including model, permissions, tokens and context when Muse reports them.
+- **Agents:** objectives, native status, model, IDs, paths, duration and results when available. A separate-window link appears only for a running agent whose conversation is available. Native message, follow-up, interrupt and resume controls remain available where supported.
+- **Native Muse CLI:** an integrated terminal for the original interactive experience, including commands that have no desktop API.
+- **Approvals:** native permission choices and structured questions, with isolated permission profiles for each root conversation.
 
-Each root GUI conversation has its own native host. **Sandbox** uses native approval rules. **Read only** starts Muse with native write and shell tools disabled. Explicitly selecting **YOLO** starts that conversation with `--disable-sandbox --trust-workspace` and approval mode `allowAll`, as documented in [Muse permissions](https://dev.meta.ai/docs/muse-code/permissions). Changing a sandbox profile requires an idle conversation and idle agents; it does not restart other chats. Child agents inherit their parent's host profile.
+![Pinned session details and activity](docs/activity-preview.png)
 
-The slash palette includes the [documented Muse commands](https://dev.meta.ai/docs/muse-code/interactive) and native `skill/list` entries. Commands with a desktop API use it; native-only commands are prepared in the integrated CLI for you to insert and execute. The terminal is its own conversation and may retain a different workspace until restarted.
+## Projects or no folder
 
-Muse's current turn-input API accepts text, images and skills. Video is played in the desktop and four sampled frames are sent to the model with the video file path; this is frame-based analysis rather than native video ingestion. PNG/JPG/WebP/GIF attachments are limited to 10 MB, and MP4/WebM/MOV videos to 50 MB. Attached media is stored locally and associated with its native command so it survives reopening. Images from native durable intake logs are also recovered when available; missing logs or logs above the 256 MB recovery bound cannot supply old image bytes.
+**New conversation** lets you choose a recent project, browse for another folder, or select **No folder**. A no-folder chat receives its own empty directory inside the app's local data. It does not silently attach your home directory or the previous project. Its native history still persists and appears in the **No folder** group.
 
-![Muse Desktop conversation](docs/conversation-preview.png)
+Each root GUI conversation runs in its own Muse host. **Sandbox** uses native approval rules. **Read only** disables write and shell tools. **YOLO** explicitly uses `--disable-sandbox --trust-workspace` and `allowAll`. Changing a host profile requires its turn and agents to be idle; child agents inherit their parent's profile. See [Muse permissions](https://dev.meta.ai/docs/muse-code/permissions).
 
-## Install on Windows
+![New conversation with project and no-folder choices](docs/new-conversation-preview.png)
 
-1. Download the Windows x64 installer from [the latest release](https://github.com/artfckt/muse-code-desktop/releases/latest). Development builds are also available in the **Muse Desktop Windows** [GitHub Actions artifacts](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml).
-2. Install Muse Code from the [official documentation](https://dev.meta.ai/docs/muse-code) if it is not installed.
-3. Open Muse Desktop, connect your account if necessary and select your project folder.
+## Attach files, images and video
 
-The app searches the official installation locations as well as `PATH`. If your CLI is installed elsewhere, use **Settings → Locate CLI**. The CLI is an external prerequisite and is not bundled in the installer. Account-dependent features require an eligible Muse account.
+Use the paperclip, drop files into the composer, or paste an image.
 
-## Make it your own
+| Attachment                                 | Limit      | How Muse receives it                                                |
+| ------------------------------------------ | ---------- | ------------------------------------------------------------------- |
+| PNG, JPG, WebP, GIF                        | 10 MB each | Native image input                                                  |
+| MP4, WebM, MOV                             | 50 MB each | Four chronological image frames and the saved local video path      |
+| Text, Markdown, JSON, CSV and source files | 25 MB each | A text excerpt of up to 100,000 characters and the saved local path |
+| PDF, DOCX, XLSX and ZIP                    | 25 MB each | The saved local path for native file tools                          |
 
-Open **Settings → Appearance** to choose **Muse Dark**, **Paper**, **Midnight**, **Forest**, **Rose**, or **Graphite**. Each palette updates the whole workspace, Windows title bar, and native terminal immediately. Your selection is saved locally and restored on the next launch. **Follow system** switches between Muse Dark and Paper with your Windows appearance setting. Changing palettes preserves the active terminal session and its output.
+Attach up to eight files per message. Uploaded files stay local and remain associated with the conversation after reopening. Reading binary documents depends on the installed Muse tools and the conversation's native permissions. Video support uses sampled frames rather than a native video input API.
 
-Settings also include font family, interface/chat/code sizes, line spacing, custom accent/background/panel/text/secondary colors, compact density, automatic activity collapse, send shortcut, follow-up behavior, new-chat permission/reasoning defaults, animations and notification preferences. Text selection is disabled by default outside editable fields and the terminal; copy buttons remain available, and selection can be enabled in settings. Markdown file links reveal the file in Explorer, avoiding accidental execution through its file association.
+## Themes, colors and fonts
 
-![Muse Desktop appearance settings in the Paper theme](docs/appearance-preview.png)
+**Muse Dark** and **Graphite** retain their original palettes. Four refreshed alternatives add **Porcelain**, **Aurora**, **Botanical** and **Orchid**, alongside automatic system appearance.
+
+Settings include visual color pickers, editable HEX colors, typography controls and searchable fonts installed on the computer. On Windows, the font list comes from the system's installed font collection. Clear a custom color to use the selected theme again. Preferences are saved locally.
+
+![Appearance and typography settings](docs/appearance-preview.png)
+
+## Subscription usage
+
+Refresh reads usage observations from **all connected conversation hosts and the control host**, keeping the newest native observation. Current-window and weekly meters appear independently; an absent meter is not treated as zero usage. The panel shows when the observation was received and when the app last checked.
+
+The native `usage/read` API returns the latest observation received by Muse; it does not initiate a billing request. If there is no observation, the app shows **No usage reported yet** and offers **Open Muse usage** to prepare `/usage` in the integrated CLI. Account-specific quota refresh still depends on the installed Muse runtime and service.
+
+## Local data and privacy
+
+The app shares the official CLI credential store without copying credentials into renderer storage. It does not require a separate desktop account. An ambient `META_API_KEY` is excluded from subscription host processes; the CLI credential backend remains intact. Existing API-key credentials are reported so you can switch to an account login.
+
+Muse owns session history, skills, rules, hooks and MCP configuration. The desktop stores preferences, permission-profile choices, attachment metadata and no-folder workspaces in Electron's local user-data directory. Files are not uploaded to a separate desktop service. Content sent through Muse follows Muse's own account and service behavior.
 
 ## Development
 
-Use Node.js 22+ and an installed Muse CLI.
+Use Node.js 22+, npm and an installed Muse CLI.
 
 ```bash
 npm ci
 npm run dev
 ```
 
-## Verification and packaging
-
 ```bash
 npm run typecheck
 npm test
 npx playwright install chromium
 npm run test:ui
-npm run build:win
+npm run build:renderer
+npm run test:electron
 ```
 
-Windows packaging rebuilds the native PTY for Electron and writes the NSIS installer to `release/`. The workflow also launches the packaged application and checks its sandboxed preload and native PTY binding before uploading the installer.
+On a headless Linux server, run Electron checks with `xvfb-run -a npm run test:electron`. Set `MUSE_TEST_BINARY` to a Muse executable to enable isolated native echo-provider integration tests. Those tests make no paid model requests and do not use your account credentials.
 
-To run the optional real-CLI smoke tests, set `MUSE_TEST_BINARY` to the official Muse executable before `npm test`. These use an isolated home and the deterministic echo provider. See [validation details](docs/VALIDATION.md) for what is verified and what still requires a live account.
+Build the Windows installer on Windows:
 
-The screenshots above use test fixtures; they illustrate the implemented interface, not a paid model invocation. This is an independent desktop client, not an official Meta application.
+```bash
+npm run build:win -- --publish never
+```
+
+Or cross-build on a Linux VPS with Wine, Xvfb and rsync installed:
+
+```bash
+npm ci
+bash scripts/build-windows-vps.sh
+```
+
+The VPS script builds in a temporary staging directory, uses the pinned package's Windows N-API PTY prebuilds, and writes the installer, blockmap and `SHA256SUMS.txt` to `release/`. The Windows workflow independently builds the app and checks the packaged renderer, sandboxed preload and native PTY.
+
+To regenerate the screenshots, start a Vite preview with `npx vite --host 127.0.0.1`, then run `node tests/capture-screenshots.cjs`. Screenshots show the actual beta interface with illustrative conversation and agent data from the test-only bridge; that bridge is not included in production.
+
+## Beta status
+
+The version and beta channel are visible in the title bar and settings. Muse's SDK is still at `0.x`, and native capabilities can vary with the installed CLI. Please include the desktop version, CLI version, Windows version and reproduction steps when reporting an issue. Avoid including credentials or private project content.

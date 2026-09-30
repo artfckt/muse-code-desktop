@@ -4,20 +4,25 @@ export type Attachment = {
   mediaType: string;
   preview: string;
   path: string;
+  text?: string;
+  size?: number;
   frames: { mediaType: string; base64Data: string }[];
 };
 export async function prepareAttachment(file: File): Promise<Attachment> {
   const video = file.type.startsWith("video/");
+  const image = file.type.startsWith("image/");
+  const isDocument = !image && !video;
   if (
-    !(
-      video
-        ? ["video/mp4", "video/webm", "video/quicktime"]
-        : ["image/png", "image/jpeg", "image/webp", "image/gif"]
-    ).includes(file.type) ||
-    file.size > (video ? 50 : 10) * 1024 * 1024
+    (!isDocument &&
+      !(
+        video
+          ? ["video/mp4", "video/webm", "video/quicktime"]
+          : ["image/png", "image/jpeg", "image/webp", "image/gif"]
+      ).includes(file.type)) ||
+    file.size > (video ? 50 : isDocument ? 25 : 10) * 1024 * 1024
   )
     throw new Error(
-      "Attach PNG, JPG, WebP or GIF up to 10 MB, or MP4/WebM/MOV up to 50 MB.",
+      "Images: up to 10 MB. Videos: up to 50 MB. Documents and source files: up to 25 MB.",
     );
   const data = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader();
@@ -25,7 +30,9 @@ export async function prepareAttachment(file: File): Promise<Attachment> {
     reader.onerror = () => reject(new Error("Cannot read attachment"));
     reader.readAsDataURL(file);
   });
-  let frames = [{ mediaType: file.type, base64Data: data.split(",")[1] }];
+  let frames = image
+    ? [{ mediaType: file.type, base64Data: data.split(",")[1] }]
+    : [];
   if (video) {
     const clip = document.createElement("video");
     clip.muted = true;
@@ -95,7 +102,9 @@ export async function prepareAttachment(file: File): Promise<Attachment> {
   return {
     id: saved.id,
     name: file.name,
-    mediaType: file.type,
+    mediaType: saved.mediaType || file.type,
+    text: saved.text,
+    size: saved.size || file.size,
     preview: saved.url,
     path: saved.path,
     frames,

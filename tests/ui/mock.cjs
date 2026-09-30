@@ -45,6 +45,9 @@ window.testBridge = {
   },
 };
 window.muse = {
+  systemFonts: async () => ["Aptos", "Cascadia Code", "Segoe UI"],
+  pickWorkspace: async () => "/projects/new-project",
+  agentAvailable: async () => true,
   commands: async () => [
     { name: "new", description: "Start a conversation", route: "desktop" },
     { name: "mcp", description: "MCP manager", route: "desktop" },
@@ -129,10 +132,13 @@ window.muse = {
       updatedAt: new Date().toISOString(),
       status: "idle",
       modelId: model.modelId,
-      workspaceRoot: workspace,
+      workspaceRoot: options?.noFolder
+        ? ""
+        : options?.workspaceRoot || workspace,
+      noFolder: !!options?.noFolder,
       permissionProfile: options?.permissionProfile || "standard",
     });
-    return { sessionId: id };
+    return { sessionId: id, raw: { session: sessions[0] } };
   },
   resumeSession: async (id) => ({
     session: sessions.find((s) => s.sessionId === id),

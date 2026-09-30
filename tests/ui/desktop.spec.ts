@@ -79,6 +79,7 @@ test("approval submits host choice and exact current requirement token", async (
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await page.evaluate(() =>
     (window as any).testBridge.requestApproval({
       approvalId: "approval-1",
@@ -120,6 +121,7 @@ test("approval submits host choice and exact current requirement token", async (
 });
 test("structured agent questions accept offered choices", async ({ page }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await page.evaluate(() =>
     (window as any).testBridge.requestInput({
       userInputId: "input-1",
@@ -153,6 +155,7 @@ test("resume preserves chronological order and ignores other sessions", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await page.getByRole("button", { name: /New conversation Just now/ }).click();
   await expect(page.locator(".user-message")).toHaveText("Earlier question");
   await expect(page.locator(".assistant-message")).toContainText(
@@ -178,7 +181,7 @@ test("resume preserves chronological order and ignores other sessions", async ({
 test("unknown usage is explicit and runtime settings are accessible", async ({
   page,
 }) => {
-  await expect(page.getByText("Waiting for Muse usage")).toBeVisible();
+  await expect(page.getByText("No usage reported yet")).toBeVisible();
   await page.getByRole("button", { name: "Settings ⌘ ," }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Locate CLI" })).toBeVisible();

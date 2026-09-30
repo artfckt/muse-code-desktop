@@ -91,6 +91,7 @@ test("completed activity collapses and final response stays visible", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await item(page, {
     kind: "toolCall",
     tool: "read_file",
@@ -120,6 +121,7 @@ test("Markdown renders Windows links, GFM, formulas, highlighted code and diagra
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await item(page, {
     kind: "agentMessage",
     text: "[prepare_intro.py](/E:/Danny/JM3 Bus Stop (Ruby)/06_scripts/prepare_intro.py)\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n- [x] Done\n\n$$x^2 + y^2$$\n\n```js\nconst n = 3;\n```\n\n```mermaid\ngraph LR\n A-->B\n```\n\n[unsafe](javascript:alert(1))",
@@ -149,6 +151,7 @@ test("custom permission dropdown supports keyboard selection and real YOLO paylo
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   const select = page.getByRole("combobox", {
     name: "Permissions",
     exact: true,
@@ -192,6 +195,7 @@ test("native agents have separate windows and follow-up controls", async ({
   page,
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await item(page, {
     kind: "subagent",
     role: "Researcher",
@@ -239,13 +243,10 @@ test("custom colors, fonts, selection and sidebar size persist", async ({
     .getByRole("textbox", { name: "accent color", exact: true })
     .fill("#4488ff");
   await page.getByRole("combobox", { name: "Interface font" }).click();
-  await page.getByRole("option", { name: "Segoe UI", exact: true }).click();
   await page
-    .getByRole("checkbox", {
-      name: "Allow selecting interface and response text",
-    })
-    .check();
-  await expect(page.locator("html")).toHaveAttribute("data-selection", "on");
+    .getByRole("option", { name: "Cascadia Code", exact: true })
+    .click();
+  await expect(page.locator("body")).toHaveCSS("user-select", "none");
   await page.reload();
   await expect(
     page.getByRole("separator", { name: "Resize conversations sidebar" }),
@@ -257,7 +258,7 @@ test("custom colors, fonts, selection and sidebar size persist", async ({
   ).toBe("#4488ff");
   expect(
     await page.evaluate(() => getComputedStyle(document.body).fontFamily),
-  ).toContain("Segoe UI");
+  ).toContain("Cascadia Code");
 });
 test("session usage details, MCP inventory and completion notifications use native events", async ({
   page,
@@ -269,6 +270,7 @@ test("session usage details, MCP inventory and completion notifications use nati
     .check();
   await page.getByRole("button", { name: "Close dialog" }).click();
   await page.getByRole("button", { name: "New conversation ＋" }).click();
+  await page.getByRole("button", { name: "Create conversation" }).click();
   await page.evaluate(() => {
     (window as any).testBridge.emit({
       method: "session/contextUsage",

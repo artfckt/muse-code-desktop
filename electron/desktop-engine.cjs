@@ -1,4 +1,7 @@
 const { MuseHost } = require("./muse-host.cjs");
+const fs = require("node:fs");
+const path = require("node:path");
+const { randomUUID } = require("node:crypto");
 
 const profiles = {
   standard: ["serve"],
@@ -37,8 +40,9 @@ class DesktopEngine {
     }
     if (
       channel === "muse:event" &&
-      payload?.method === "account/loginCompleted" &&
-      payload.params?.outcome === "granted"
+      ((payload?.method === "account/loginCompleted" &&
+        payload.params?.outcome === "granted") ||
+        payload?.method === "account/changed")
     )
       this.latestUsage = null;
     this.options.emit?.(channel, payload);
@@ -109,21 +113,15 @@ class DesktopEngine {
     }
   }
   async query(method, params = {}) {
+    if (method === "usage/read") return this.readUsage();
     const result = await (this.hostFor(params.sessionId) || this.control).query(
       method,
       params,
     );
     this.registerChildren(result, params.sessionId);
-    if (method === "usage/read") {
-      if (
-        result.usage?.observedAtMs &&
-        (!this.latestUsage ||
-          result.usage.observedAtMs >= this.latestUsage.observedAtMs)
-      )
-        this.latestUsage = result.usage;
-      return this.latestUsage ? { ...result, usage: this.latestUsage } : result;
-    }
-    return result;
+    return result.session
+      ? { ...result, session: this.projectSession(result.session) }
+      : result;
   }
   async command(method, params = {}) {
     if (method === "session/resume" && !this.hostFor(params.sessionId)) {
@@ -133,7 +131,13 @@ class DesktopEngine {
         const result = await host.command(method, params);
         this.sessions.set(params.sessionId, host);
         this.registerChildren(result, params.sessionId);
-        return { ...result, permissionProfile: host.profile };
+        return {
+          ...result,
+          session: result.session
+            ? this.projectSession(result.session)
+            : result.session,
+          permissionProfile: host.profile,
+        };
       } catch (error) {
         await host.close();
         throw error;
@@ -151,13 +155,24 @@ class DesktopEngine {
       this.options.savePolicies?.(this.policies);
     }
     return method === "session/resume"
-      ? { ...result, permissionProfile: host.profile || "standard" }
+      ? {
+          ...result,
+          session: result.session
+            ? this.projectSession(result.session)
+            : result.session,
+          permissionProfile: host.profile || "standard",
+        }
       : result;
   }
   async startSession(options = {}) {
     const profile = options.permissionProfile || "standard";
     const host = this.newHost(profile);
-    host.workspace = this.workspace;
+    if (options.noFolder) {
+      if (!this.options.standaloneRoot)
+        throw new Error("No-folder storage is unavailable.");
+      host.workspace = path.join(this.options.standaloneRoot, randomUUID());
+      fs.mkdirSync(host.workspace, { recursive: true });
+    } else host.workspace = options.workspaceRoot || this.workspace;
     try {
       const result = await host.startSession({
         ...options,
@@ -167,7 +182,14 @@ class DesktopEngine {
       this.sessions.set(result.sessionId, host);
       this.policies[result.sessionId] = profile;
       this.options.savePolicies?.(this.policies);
-      return { ...result, permissionProfile: profile };
+      return {
+        ...result,
+        permissionProfile: profile,
+        noFolder: !!options.noFolder,
+        raw: result.raw?.session
+          ? { ...result.raw, session: this.projectSession(result.raw.session) }
+          : result.raw,
+      };
     } catch (error) {
       await host.close();
       throw error;
@@ -248,7 +270,7 @@ class DesktopEngine {
         if (!seen.has(row.sessionId)) {
           seen.add(row.sessionId);
           sessions.push({
-            ...row,
+            ...this.projectSession(row),
             permissionProfile: this.policies[row.sessionId] || "standard",
           });
         }
@@ -256,6 +278,39 @@ class DesktopEngine {
       cursor = result.nextCursor;
     } while (cursor);
     return { sessions };
+  }
+  projectSession(row) {
+    const root = this.options.standaloneRoot;
+    const relative =
+      root && row.workspaceRoot ? path.relative(root, row.workspaceRoot) : null;
+    const noFolder =
+      relative !== null &&
+      relative !== ".." &&
+      !relative.startsWith(`..${path.sep}`) &&
+      !path.isAbsolute(relative);
+    return noFolder ? { ...row, workspaceRoot: "", noFolder: true } : row;
+  }
+  async readUsage() {
+    const hosts = [...new Set([...this.sessions.values(), this.control])];
+    const results = await Promise.allSettled(
+      hosts.map((host) => host.query("usage/read", {})),
+    );
+    for (const result of results) {
+      const usage = result.status === "fulfilled" && result.value?.usage;
+      if (
+        usage?.observedAtMs &&
+        (!this.latestUsage ||
+          usage.observedAtMs >= this.latestUsage.observedAtMs)
+      )
+        this.latestUsage = usage;
+    }
+    if (results.every((result) => result.status === "rejected"))
+      throw results[0].reason;
+    return {
+      ...(this.latestUsage ? { usage: this.latestUsage } : {}),
+      checkedAtMs: Date.now(),
+      sourceCount: hosts.length,
+    };
   }
   async close() {
     await Promise.allSettled(

@@ -51,6 +51,9 @@ const os = require("node:os");
       "function",
     );
     for (const method of [
+      "pickWorkspace",
+      "systemFonts",
+      "agentAvailable",
       "commands",
       "mcpInventory",
       "saveAttachment",
@@ -68,6 +71,12 @@ const os = require("node:os");
         ),
         "function",
       );
+    const fonts = await window.evaluate(() => globalThis.muse.systemFonts());
+    assert.ok(
+      Array.isArray(fonts),
+      "native installed font discovery returns a list",
+    );
+    if (process.platform === "win32") assert.ok(fonts.includes("Segoe UI"));
     const media = await window.evaluate(() =>
       globalThis.muse.saveAttachment({
         name: "probe.png",
@@ -160,6 +169,25 @@ const os = require("node:os");
         .getByRole("button", { name: "Conversation", exact: true })
         .click();
       assert.equal(await window.locator(".terminal-canvas .xterm").count(), 1);
+    }
+    if (process.platform === "win32") {
+      const prebuiltBindings = await application.evaluate(({ app }) => {
+        const { createRequire } = process.getBuiltinModule("node:module");
+        const path = process.getBuiltinModule("node:path");
+        const appRequire = createRequire(
+          path.join(app.getAppPath(), "package.json"),
+        );
+        return ["conpty", "conpty_console_list", "pty"].map((name) => ({
+          name,
+          exports: Object.keys(
+            appRequire(`node-pty/prebuilds/win32-x64/${name}.node`),
+          ),
+        }));
+      });
+      assert.ok(
+        prebuiltBindings.every((binding) => binding.exports.length > 0),
+        "Windows N-API prebuilds used by the VPS installer load in Electron",
+      );
     }
     const terminalOutput = await application.evaluate(
       ({ app }) =>

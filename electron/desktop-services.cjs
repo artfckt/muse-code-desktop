@@ -4,6 +4,16 @@ const os = require("node:os");
 const { randomUUID } = require("node:crypto");
 const { Readable } = require("node:stream");
 
+const documentExtensions = new Set(
+  ".pdf .txt .md .json .csv .ts .tsx .js .jsx .py .c .cpp .h .cs .go .rs .java .css .html .yaml .yml .xml .log .sql .sh .docx .xlsx .zip".split(
+    " ",
+  ),
+);
+const textExtensions = new Set(
+  ".txt .md .json .csv .ts .tsx .js .jsx .py .c .cpp .h .cs .go .rs .java .css .html .yaml .yml .xml .log .sql .sh".split(
+    " ",
+  ),
+);
 const mediaTypes = {
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -58,18 +68,24 @@ class DesktopServices {
     fs.renameSync(staged, this.manifestPath);
   }
   saveAttachment(input) {
-    const extension = Object.keys(mediaTypes).find(
-      (ext) => mediaTypes[ext] === input.mediaType,
-    );
+    const namedExtension = path.extname(String(input.name || "")).toLowerCase();
+    const document = documentExtensions.has(namedExtension);
+    const extension = document
+      ? namedExtension
+      : Object.keys(mediaTypes).find(
+          (ext) => mediaTypes[ext] === input.mediaType,
+        );
     if (
       !extension ||
-      !/^(image|video)\//.test(input.mediaType) ||
+      (!document && !/^(image|video)\//.test(input.mediaType)) ||
       typeof input.base64Data !== "string"
     )
       throw new Error("Unsupported attachment.");
-    const limit = input.mediaType.startsWith("video/")
-      ? 50 * 1024 * 1024
-      : 10 * 1024 * 1024;
+    const limit = document
+      ? 25 * 1024 * 1024
+      : input.mediaType.startsWith("video/")
+        ? 50 * 1024 * 1024
+        : 10 * 1024 * 1024;
     if (input.base64Data.length > Math.ceil((limit * 4) / 3) + 4)
       throw new Error("Attachment is too large.");
     const bytes = Buffer.from(input.base64Data, "base64");
@@ -80,8 +96,18 @@ class DesktopServices {
     fs.writeFileSync(file, bytes);
     const attachment = {
       id,
-      name: String(input.name || "Attachment").slice(0, 200),
-      mediaType: input.mediaType,
+      name: path
+        .basename(String(input.name || "Attachment").replace(/\\/g, "/"))
+        .slice(0, 200),
+      mediaType: document
+        ? textExtensions.has(extension)
+          ? "text/plain"
+          : "application/octet-stream"
+        : input.mediaType,
+      size: bytes.length,
+      ...(textExtensions.has(extension)
+        ? { text: bytes.toString("utf8").slice(0, 100000) }
+        : {}),
       path: file,
       url: mediaUrl(file),
     };

@@ -186,6 +186,7 @@ app.whenReady().then(() => {
     home: app.getPath("home"),
     binary: settings().binary,
     version: app.getVersion(),
+    standaloneRoot: path.join(app.getPath("userData"), "standalone"),
     emit,
     policies: settings().sessionProfiles,
     savePolicies: (sessionProfiles) => saveSettings({ sessionProfiles }),
@@ -214,6 +215,8 @@ app.whenReady().then(() => {
     }
   });
   handle("bootstrap", async () => ({
+    appVersion: app.getVersion(),
+    channel: "beta",
     diagnostic: await muse.diagnose(),
     lastWorkspace: settings().workspace || null,
     workspaces: settings().workspaces || [],
@@ -374,7 +377,93 @@ app.whenReady().then(() => {
     return result;
   });
   handle("list-sessions", () => muse.listSessions());
-  handle("start-session", (options) => muse.startSession(options));
+  handle("pick-workspace", async () => {
+    const result = await dialog.showOpenDialog(window, {
+      title: "Choose a project folder",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    return result.canceled ? null : result.filePaths[0];
+  });
+  handle(
+    "system-fonts",
+    () =>
+      new Promise((resolve, reject) => {
+        const windows = process.platform === "win32";
+        const child = spawn(
+          windows ? "powershell.exe" : "fc-list",
+          windows
+            ? [
+                "-NoProfile",
+                "-NonInteractive",
+                "-Command",
+                "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; Add-Type -AssemblyName System.Drawing; @((New-Object System.Drawing.Text.InstalledFontCollection).Families.Name | Sort-Object -Unique) | ConvertTo-Json -Compress",
+              ]
+            : ["--format", "%{family}\\n"],
+          { windowsHide: true },
+        );
+        let output = "";
+        const timer = setTimeout(() => {
+          child.kill();
+          reject(new Error("Font discovery timed out."));
+        }, 10000);
+        child.stdout.on("data", (data) => {
+          if (output.length < 1024 * 1024) output += data;
+        });
+        child.on("error", (error) => {
+          clearTimeout(timer);
+          reject(error);
+        });
+        child.on("close", (code) => {
+          clearTimeout(timer);
+          if (code !== 0)
+            return reject(new Error("Cannot read installed fonts."));
+          try {
+            const fonts = windows
+              ? JSON.parse(output.replace(/^\uFEFF/, ""))
+              : output.split(/[\n,]/);
+            resolve(
+              [
+                ...new Set(
+                  (Array.isArray(fonts) ? fonts : [fonts])
+                    .map((font) => String(font).trim())
+                    .filter(Boolean),
+                ),
+              ].sort(),
+            );
+          } catch (error) {
+            reject(error);
+          }
+        });
+      }),
+  );
+  handle("agent-available", async (id) => {
+    try {
+      const result = await muse.query("session/read", {
+        sessionId: String(id),
+        excludeItems: true,
+      });
+      return !!result.session;
+    } catch {
+      return false;
+    }
+  });
+  handle("start-session", async (options = {}) => {
+    if (options.workspaceRoot) {
+      const connected = await muse.chooseWorkspace(
+        String(options.workspaceRoot),
+      );
+      saveSettings({
+        workspace: connected.workspace,
+        workspaces: [
+          ...new Set([...(settings().workspaces || []), connected.workspace]),
+        ],
+      });
+    } else if (options.noFolder) {
+      muse.workspace = null;
+      saveSettings({ workspace: null });
+    }
+    return muse.startSession(options);
+  });
   handle("resume-session", (id) =>
     muse.command("session/resume", { sessionId: id, excludeItems: false }),
   );

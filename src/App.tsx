@@ -8,6 +8,9 @@ import {
   useState,
 } from "react";
 import {
+  ArrowDown,
+  FileText,
+  Paperclip,
   ArrowUp,
   ArrowUpRight,
   Check,
@@ -38,6 +41,8 @@ import {
   Users,
 } from "lucide-react";
 import { Select } from "./Select";
+import { NewConversation } from "./NewConversation";
+import { version as appVersion } from "../package.json";
 import { DesktopSettings } from "./DesktopSettings";
 import {
   readPreferences,
@@ -166,7 +171,7 @@ function DesktopApp() {
     savePreferences(preferences);
     saveThemePreference(themePreference);
     void window.muse
-      .setWindowTheme?.({
+      ?.setWindowTheme?.({
         background: /^#[a-f0-9]{6}$/i.test(preferences.colors.bg || "")
           ? preferences.colors.bg
           : theme.colors.bg,
@@ -198,6 +203,16 @@ function DesktopApp() {
   const [slashIndex, setSlashIndex] = useState(0);
   const [terminalCommand, setTerminalCommand] = useState("");
   const [usage, setUsage] = useState<any>(null);
+  const [usageLoading, setUsageLoading] = useState(false);
+  const [usageChecked, setUsageChecked] = useState<number | null>(null);
+  const [usageError, setUsageError] = useState("");
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [showLatest, setShowLatest] = useState(false);
+  const [newConversation, setNewConversation] = useState<{
+    initial: string;
+  } | null>(null);
   const [pending, setPending] = useState<{
     approvals: any[];
     userInputs: any[];
@@ -298,6 +313,7 @@ function DesktopApp() {
       sessionsRefreshAgain.current = true;
       return sessionsRequest.current;
     }
+    setSessionsLoading(true);
     const request = window.muse
       .listSessions()
       .then((raw) =>
@@ -314,6 +330,7 @@ function DesktopApp() {
       )
       .finally(() => {
         sessionsRequest.current = null;
+        setSessionsLoading(false);
         if (sessionsRefreshAgain.current) {
           sessionsRefreshAgain.current = false;
           void refreshSessions().catch(() => {});
@@ -332,10 +349,19 @@ function DesktopApp() {
         userInputs: result.userInputs || [],
       });
   }, []);
-  const refreshUsage = useCallback(
-    async () => setUsage(subscriptionUsage(await window.muse.usage())),
-    [],
-  );
+  const refreshUsage = useCallback(async () => {
+    setUsageLoading(true);
+    setUsageError("");
+    try {
+      const raw = await window.muse.usage();
+      setUsage(subscriptionUsage(raw));
+      setUsageChecked(raw.checkedAtMs || Date.now());
+    } catch (error: any) {
+      setUsageError(error.message || "Cannot read Muse usage.");
+    } finally {
+      setUsageLoading(false);
+    }
+  }, []);
   async function run(action: () => Promise<any>) {
     setBusy(true);
     setError("");
@@ -350,6 +376,8 @@ function DesktopApp() {
   }
   function selectSession(id: string) {
     activeRef.current = id;
+    followRef.current = true;
+    setShowLatest(false);
     setSession(id);
     setReadOnly(false);
     setNextCursor(null);
@@ -374,7 +402,7 @@ function DesktopApp() {
     void refreshSessions().catch((err) => setError(err.message));
     const results = await Promise.allSettled([
       window.muse.listModels(),
-      window.muse.usage(),
+      refreshUsage(),
       refreshAccount(),
     ]);
     if (results[0].status === "fulfilled") {
@@ -384,8 +412,6 @@ function DesktopApp() {
         (list.find((row: any) => row.isDefault) || list[0])?.modelId || "",
       );
     }
-    if (results[1].status === "fulfilled")
-      setUsage(subscriptionUsage(results[1].value));
     setStatus("Project connected");
   }
   async function chooseWorkspace() {
@@ -394,7 +420,13 @@ function DesktopApp() {
       if (result) await hydrateWorkspace(result.workspace);
     });
   }
-  async function createSession(options: { fresh?: boolean } = {}) {
+  async function createSession(
+    options: { fresh?: boolean; workspaceRoot?: string } = {},
+  ) {
+    const root =
+      options.workspaceRoot !== undefined
+        ? options.workspaceRoot
+        : workspaceRef.current;
     const profile = options.fresh
       ? preferencesRef.current.defaultPermissions
       : permissionProfile;
@@ -402,7 +434,12 @@ function DesktopApp() {
       modelId: modelId || undefined,
       approvalMode: options.fresh ? undefined : approvalMode || undefined,
       permissionProfile: profile,
+      workspaceRoot: root || undefined,
+      noFolder: !root,
     });
+    workspaceRef.current = root;
+    setWorkspace(root);
+    if (root) setWorkspaces((prev) => [...new Set([...prev, root])]);
     setPermissionProfile(profile);
     if (options.fresh) {
       setReasoning(preferencesRef.current.defaultReasoning);
@@ -427,94 +464,114 @@ function DesktopApp() {
     return id;
   }
   async function loadSession(id: string) {
-    await run(async () => {
-      const previousId = activeRef.current;
-      const row = sessions.find((row) => row.sessionId === id);
-      if (row?.workspaceRoot && row.workspaceRoot !== workspaceRef.current) {
-        await window.muse.connectWorkspace(row.workspaceRoot);
-        workspaceRef.current = row.workspaceRoot;
-        setWorkspace(row.workspaceRoot);
-      }
-      selectSession(id);
-      buffering.current = [];
-      setItems([]);
-      setPending({ approvals: [], userInputs: [] });
-      setSkills([]);
-      try {
-        let result;
+    setMessagesLoading(true);
+    setTab("conversation");
+    try {
+      await run(async () => {
+        const previousId = activeRef.current;
+        const previousWorkspace = workspaceRef.current;
+        const row = sessions.find((row) => row.sessionId === id);
+        if (row?.workspaceRoot && row.workspaceRoot !== workspaceRef.current) {
+          await window.muse.connectWorkspace(row.workspaceRoot);
+          workspaceRef.current = row.workspaceRoot;
+          setWorkspace(row.workspaceRoot);
+        }
+        workspaceRef.current = row?.workspaceRoot || "";
+        setWorkspace(row?.workspaceRoot || "");
+        selectSession(id);
+        buffering.current = [];
+        setItems([]);
+        setPending({ approvals: [], userInputs: [] });
+        setSkills([]);
         try {
-          result = await window.muse.resumeSession(id);
-        } catch (err: any) {
-          if (/sessionInUse|in use|lease/i.test(err.message)) {
-            result = await window.muse.readSession(id);
-            setReadOnly(true);
-            setStatus(
-              "This session is open in another Muse window. Close it there to continue here.",
-            );
-          } else throw err;
-        }
-        const history = historyItems(result);
-        const store = storeFor(id);
-        if (history) store.seed(history);
-        else {
-          const page = await window.muse.viewPage(id);
-          store.seed([]);
-          page.events?.forEach((event: MuseEvent) => store.apply(event));
-          setNextCursor(page.nextCursor);
-        }
-        for (const event of buffering.current || []) store.apply(event);
-        buffering.current = null;
-        setItems(store.list());
-        const savedMedia = await window.muse.sessionMedia(id);
-        setMedia((prev) => ({ ...prev, [id]: savedMedia }));
-        setPermissionProfile(
-          result.permissionProfile || row?.permissionProfile || "standard",
-        );
-        if (result.session?.workspaceRoot) {
-          workspaceRef.current = result.session.workspaceRoot;
-          setWorkspace(result.session.workspaceRoot);
-        }
-        setModelId(result.session?.modelId || "");
-        const snapshot = result.history?.snapshot?.state;
-        if (snapshot)
-          setSessionStats((prev) => ({
+          let result;
+          try {
+            result = await window.muse.resumeSession(id);
+          } catch (err: any) {
+            if (/sessionInUse|in use|lease/i.test(err.message)) {
+              result = await window.muse.readSession(id);
+              setReadOnly(true);
+              setStatus(
+                "This session is open in another Muse window. Close it there to continue here.",
+              );
+            } else throw err;
+          }
+          const history = historyItems(result);
+          const store = storeFor(id);
+          if (history) store.seed(history);
+          else {
+            const page = await window.muse.viewPage(id);
+            store.seed([]);
+            page.events?.forEach((event: MuseEvent) => store.apply(event));
+            setNextCursor(page.nextCursor);
+          }
+          for (const event of buffering.current || []) store.apply(event);
+          buffering.current = null;
+          setItems(store.list());
+          setMessagesLoading(false);
+          void window.muse
+            .sessionMedia(id)
+            .then((savedMedia) =>
+              setMedia((prev) => ({ ...prev, [id]: savedMedia })),
+            )
+            .catch((error) => setError(error.message));
+          setPermissionProfile(
+            result.permissionProfile || row?.permissionProfile || "standard",
+          );
+          if (result.session) {
+            workspaceRef.current = result.session.workspaceRoot || "";
+            setWorkspace(result.session.workspaceRoot || "");
+          }
+          setModelId(result.session?.modelId || "");
+          const snapshot = result.history?.snapshot?.state;
+          if (snapshot)
+            setSessionStats((prev) => ({
+              ...prev,
+              [id]: {
+                ...prev[id],
+                contextUsage: snapshot.contextUsage,
+                tokenUsage: snapshot.tokenUsage
+                  ? { cumulative: snapshot.tokenUsage }
+                  : prev[id]?.tokenUsage,
+                goal: snapshot.goal,
+                todoList: snapshot.todoList,
+              },
+            }));
+          setApprovalMode(
+            result.session?.approvalMode?.mode ||
+              snapshot?.approvalMode?.mode ||
+              "",
+          );
+          setReasoning(snapshot?.reasoningEffort?.reasoningEffort || "default");
+          setTurns((prev) => ({
             ...prev,
-            [id]: {
-              ...prev[id],
-              contextUsage: snapshot.contextUsage,
-              tokenUsage: snapshot.tokenUsage
-                ? { cumulative: snapshot.tokenUsage }
-                : prev[id]?.tokenUsage,
-              goal: snapshot.goal,
-              todoList: snapshot.todoList,
-            },
+            [id]:
+              result.session?.activeTurnId ||
+              snapshot?.activeTurn?.turnId ||
+              null,
           }));
-        setApprovalMode(
-          result.session?.approvalMode?.mode ||
-            snapshot?.approvalMode?.mode ||
-            "",
-        );
-        setReasoning(snapshot?.reasoningEffort?.reasoningEffort || "default");
-        setTurns((prev) => ({
-          ...prev,
-          [id]:
-            result.session?.activeTurnId ||
-            snapshot?.activeTurn?.turnId ||
-            null,
-        }));
-        await Promise.allSettled([
-          refreshPending(),
-          window.muse.listModels(id).then((raw) => setModels(raw.models || [])),
-          window.muse.listSkills(id).then((raw) => setSkills(raw.skills || [])),
-          refreshUsage(),
-        ]);
-      } catch (err) {
-        buffering.current = null;
-        selectSession(previousId);
-        setItems(stores.current.get(previousId)?.list() || []);
-        throw err;
-      }
-    });
+          void Promise.allSettled([
+            refreshPending(),
+            window.muse.listModels(id).then((raw) => {
+              if (activeRef.current === id) setModels(raw.models || []);
+            }),
+            window.muse.listSkills(id).then((raw) => {
+              if (activeRef.current === id) setSkills(raw.skills || []);
+            }),
+            refreshUsage(),
+          ]);
+        } catch (err) {
+          buffering.current = null;
+          selectSession(previousId);
+          workspaceRef.current = previousWorkspace;
+          setWorkspace(previousWorkspace);
+          setItems(stores.current.get(previousId)?.list() || []);
+          throw err;
+        }
+      });
+    } finally {
+      setMessagesLoading(false);
+    }
   }
   async function openLogin() {
     setModal("account");
@@ -581,13 +638,9 @@ function DesktopApp() {
     setStatus("Command prepared in Muse CLI. Review it and press Enter there.");
   }
   async function sendPrompt() {
-    if ((!prompt.trim() && !images.length) || busy || readOnly) return;
+    if ((!prompt.trim() && !images.length) || busy || uploading || readOnly)
+      return;
     await run(async () => {
-      if (!workspace) {
-        const result = await window.muse.chooseWorkspace();
-        if (!result) return;
-        await hydrateWorkspace(result.workspace);
-      }
       const text = prompt.trim();
       const slash = text.match(/^\/([^\s]+)(?:\s+([\s\S]*))?$/);
       if (slash) {
@@ -713,10 +766,11 @@ function DesktopApp() {
                 ? `Use native Muse subagents to delegate independent parts of this task. ${slash[2] || "Ask me which task I want the agents to work on."}`
                 : text) +
               images
-                .filter((image) => image.mediaType.startsWith("video/"))
-                .map(
-                  (image) =>
-                    `\nVideo: ${image.name}. Four sampled frames are attached in chronological order. Full video file: ${image.path}`,
+                .filter((image) => !image.mediaType.startsWith("image/"))
+                .map((image) =>
+                  image.mediaType.startsWith("video/")
+                    ? `\nVideo: ${image.name}. Four sampled frames are attached in chronological order. Full video file: ${image.path}`
+                    : `\nAttached file: ${image.name}\nLocal path: ${image.path}${image.text ? `\n<attached-file name=${JSON.stringify(image.name)}>\n${image.text}\n</attached-file>` : "\nRead this local file using the native tools if needed."}`,
                 )
                 .join(""),
           skill,
@@ -737,6 +791,8 @@ function DesktopApp() {
     });
   }
   async function addImages(files: FileList | File[]) {
+    if (uploading) return;
+    setUploading(true);
     try {
       if (images.length + files.length > 8)
         throw new Error("Attach up to eight files per message.");
@@ -752,6 +808,8 @@ function DesktopApp() {
       );
     } catch (err: any) {
       setError(err.message);
+    } finally {
+      setUploading(false);
     }
   }
 
@@ -974,7 +1032,10 @@ function DesktopApp() {
             result.lastWorkspace,
           );
           if (alive) await hydrateWorkspace(connected.workspace);
-        } else if (result.diagnostic.connected) ignore(refreshSessions());
+        } else if (result.diagnostic.connected) {
+          ignore(refreshSessions());
+          ignore(refreshUsage());
+        } else setSessionsLoading(false);
         if (alive && result.requestedSession && result.diagnostic.connected)
           await loadSession(result.requestedSession);
       }),
@@ -991,7 +1052,7 @@ function DesktopApp() {
     };
   }, [refreshAccount, refreshPending, refreshSessions, refreshUsage]);
   useEffect(
-    () => window.muse.onNavigateSession((id) => void loadSession(id)),
+    () => window.muse?.onNavigateSession((id) => void loadSession(id)),
     [sessions],
   );
   useEffect(() => {
@@ -1051,6 +1112,8 @@ function DesktopApp() {
       <div className="window-bar">
         <MuseMark />
         <span>Muse Desktop</span>
+        <span className="beta-badge">BETA</span>
+        <span className="app-version">v{appVersion}</span>
         <span className="window-caption">A little space for big ideas.</span>
       </div>
       <aside className="sidebar">
@@ -1066,36 +1129,21 @@ function DesktopApp() {
           </div>
         </div>
         <button
-          className="project-switcher"
-          onClick={chooseWorkspace}
-          disabled={busy}
-        >
-          <Folder size={18} />
-          <span>
-            <b>{workspace ? basename(workspace) : "Open a project"}</b>
-            <small>
-              {workspace ? "Local workspace" : "Choose your workspace"}
-            </small>
-          </span>
-          <ChevronsUpDown size={14} />
-        </button>
-        <button
           className="new-chat-button"
           disabled={busy}
-          onClick={() => {
-            if (!workspace) void chooseWorkspace();
-            else
-              void run(async () => {
-                await createSession({ fresh: true });
-                setPrompt("");
-                setImages([]);
-              });
-          }}
+          onClick={() => setNewConversation({ initial: workspace })}
         >
           <Plus size={17} /> New conversation <kbd>＋</kbd>
         </button>
         <div className="sidebar-heading">
-          <span>CONVERSATIONS</span>
+          <span>PROJECTS & CHATS</span>
+          {sessionsLoading ? (
+            <Loader2
+              size={12}
+              className="spin"
+              aria-label="Loading projects and conversations"
+            />
+          ) : null}
           <button
             className="icon-button"
             title="Refresh conversations"
@@ -1114,7 +1162,19 @@ function DesktopApp() {
             onChange={(event) => setSearch(event.target.value)}
           />
         </label>
-        <nav className="session-list" aria-label="Conversations">
+        <nav
+          className="session-list"
+          aria-label="Conversations"
+          aria-busy={sessionsLoading}
+        >
+          {sessionsLoading && !sessions.length ? (
+            <div className="list-skeleton" role="status">
+              Loading projects and conversations…
+              {[0, 1, 2, 3, 4].map((i) => (
+                <i key={i} />
+              ))}
+            </div>
+          ) : null}
           {groupedWorkspaces.map((root) => {
             const rows = sessions.filter(
               (row) =>
@@ -1129,7 +1189,7 @@ function DesktopApp() {
                 >
                   <button
                     className="workspace-collapse"
-                    aria-label={`Toggle ${root ? basename(root) : "Other conversations"}`}
+                    aria-label={`Toggle ${root ? basename(root) : "No folder"}`}
                     aria-expanded={!collapsed[root]}
                     onClick={() =>
                       setCollapsed((prev) => ({ ...prev, [root]: !prev[root] }))
@@ -1147,23 +1207,14 @@ function DesktopApp() {
                     onClick={() => void switchWorkspace(root)}
                   >
                     <Folder size={13} />
-                    <b>{root ? basename(root) : "Other conversations"}</b>
+                    <b>{root ? basename(root) : "No folder"}</b>
                     <small>{rows.length}</small>
                   </button>
                   <button
                     className="icon-button"
                     title={`New conversation in ${root ? basename(root) : "workspace"}`}
-                    disabled={busy || !root}
-                    onClick={() =>
-                      void run(async () => {
-                        if (root !== workspaceRef.current) {
-                          const connected =
-                            await window.muse.connectWorkspace(root);
-                          await hydrateWorkspace(connected.workspace);
-                        }
-                        await createSession({ fresh: true });
-                      })
-                    }
+                    disabled={busy}
+                    onClick={() => setNewConversation({ initial: root })}
                   >
                     <Plus size={12} />
                   </button>
@@ -1205,14 +1256,14 @@ function DesktopApp() {
               </section>
             );
           })}
-          {sessions.length === 0 ? (
+          {!sessionsLoading && sessions.length === 0 ? (
             <div className="sidebar-empty">
               <MessageSquare size={20} />
               <p>Your ideas start here.</p>
               <small>
                 {workspace
                   ? "Create your first conversation."
-                  : "Open a project to see its history."}
+                  : "Start with a project or no folder."}
               </small>
             </div>
           ) : null}
@@ -1237,7 +1288,7 @@ function DesktopApp() {
         <header className="topbar">
           <div className="breadcrumb">
             <Folder size={14} />
-            <span>{workspace ? basename(workspace) : "Workspace"}</span>
+            <span>{workspace ? basename(workspace) : "No folder"}</span>
             <span>/</span>
             <b>{active ? sessionTitle(active) : "New conversation"}</b>
           </div>
@@ -1335,14 +1386,24 @@ function DesktopApp() {
             />
           </Suspense>
         ) : null}
+        {tab === "activity" ? (
+          <SessionDetails
+            session={active || { sessionId: session, modelId }}
+            stats={sessionStats[session] || {}}
+            items={items}
+            policy={permissionProfile}
+          />
+        ) : null}
         <div
           className="chat-scroll"
+          aria-busy={messagesLoading}
           style={{ display: tab === "terminal" ? "none" : undefined }}
           ref={scrollRef}
           onScroll={(event) => {
             const target = event.currentTarget;
             followRef.current =
               target.scrollHeight - target.scrollTop - target.clientHeight < 80;
+            setShowLatest(!followRef.current);
           }}
         >
           {tab === "agents" ? (
@@ -1353,15 +1414,18 @@ function DesktopApp() {
               onRefresh={() => void refreshSessions()}
             />
           ) : null}
-          {tab === "activity" ? (
-            <SessionDetails
-              session={active || { sessionId: session, modelId }}
-              stats={sessionStats[session] || {}}
-              items={items}
-              policy={permissionProfile}
-            />
+          {messagesLoading ? (
+            <div
+              className="messages-loading"
+              role="status"
+              aria-label="Loading messages"
+            >
+              <Loader2 size={22} className="spin" />
+              <b>Loading conversation…</b>
+              <small>Restoring messages and activity</small>
+            </div>
           ) : null}
-          {items.length === 0 && tab === "conversation" ? (
+          {items.length === 0 && !messagesLoading && tab === "conversation" ? (
             <div className="welcome">
               <div className="hero-art">
                 <div className="orbit orbit-one" />
@@ -1385,16 +1449,6 @@ function DesktopApp() {
                 <br className="wide-only" /> happen. Powered by the Muse Code
                 you already know.
               </p>
-              {!workspace ? (
-                <button
-                  className="accent-button hero-action"
-                  onClick={chooseWorkspace}
-                  disabled={busy}
-                >
-                  <FolderOpen size={16} /> Open a project{" "}
-                  <ArrowUpRight size={15} />
-                </button>
-              ) : null}
               <div className="suggestion-grid">
                 {suggestions.map((card) => (
                   <button
@@ -1529,6 +1583,21 @@ function DesktopApp() {
             ))}
           </div>
         </div>
+        {showLatest && tab === "conversation" ? (
+          <button
+            className="jump-latest"
+            onClick={() => {
+              followRef.current = true;
+              setShowLatest(false);
+              scrollRef.current?.scrollTo({
+                top: scrollRef.current.scrollHeight,
+                behavior: "smooth",
+              });
+            }}
+          >
+            <ArrowDown size={14} /> Jump to latest
+          </button>
+        ) : null}
         <div
           className="composer-wrap"
           style={{ display: tab === "terminal" ? "none" : undefined }}
@@ -1553,8 +1622,10 @@ function DesktopApp() {
                   <div key={`${image.name}-${index}`}>
                     {image.mediaType.startsWith("video/") ? (
                       <video src={image.preview} preload="metadata" />
-                    ) : (
+                    ) : image.mediaType.startsWith("image/") ? (
                       <img src={image.preview} alt={image.name} />
+                    ) : (
+                      <FileText size={22} className="file-thumbnail" />
                     )}
                     <span>{image.name}</span>
                     <button
@@ -1660,16 +1731,21 @@ function DesktopApp() {
               <div className="composer-left">
                 <button
                   className="icon-button"
-                  title="Attach images or videos"
+                  title="Attach files, images or videos"
+                  disabled={uploading || busy}
                   onClick={() => fileRef.current?.click()}
                 >
-                  <ImagePlus size={17} />
+                  {uploading ? (
+                    <Loader2 size={17} className="spin" />
+                  ) : (
+                    <Paperclip size={17} />
+                  )}
                 </button>
                 <input
                   ref={fileRef}
                   type="file"
                   multiple
-                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime"
+                  accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm,video/quicktime,.pdf,.txt,.md,.json,.csv,.ts,.tsx,.js,.jsx,.py,.c,.cpp,.h,.cs,.go,.rs,.java,.css,.html,.yaml,.yml,.xml,.log,.sql,.sh,.docx,.xlsx,.zip"
                   hidden
                   onChange={(event) => {
                     if (event.target.files) void addImages(event.target.files);
@@ -1794,7 +1870,10 @@ function DesktopApp() {
                   title={working ? "Queue follow-up" : "Send message"}
                   aria-label={working ? "Queue follow-up" : "Send message"}
                   disabled={
-                    busy || readOnly || (!prompt.trim() && !images.length)
+                    busy ||
+                    uploading ||
+                    readOnly ||
+                    (!prompt.trim() && !images.length)
                   }
                   onClick={() => void sendPrompt()}
                 >
@@ -1922,9 +2001,10 @@ function DesktopApp() {
                 <button
                   className="icon-button"
                   title="Refresh subscription usage"
-                  onClick={() => void run(refreshUsage)}
+                  disabled={usageLoading}
+                  onClick={() => void refreshUsage()}
                 >
-                  <RefreshCw size={11} />
+                  <RefreshCw size={11} className={usageLoading ? "spin" : ""} />
                 </button>
               </h3>
               {usage ? (
@@ -1932,42 +2012,73 @@ function DesktopApp() {
                   {[
                     ["Current window", usage.window],
                     ["Weekly", usage.weekly],
-                  ].map(([label, block]: any) => (
-                    <div className="usage-meter" key={label}>
-                      <div>
-                        <span>{label}</span>
-                        <b>{block.usedPercent}%</b>
+                  ]
+                    .filter(
+                      ([, block]) =>
+                        block && Number.isFinite(block.usedPercent),
+                    )
+                    .map(([label, block]: any) => (
+                      <div className="usage-meter" key={label}>
+                        <div>
+                          <span>{label}</span>
+                          <b>{block.usedPercent}%</b>
+                        </div>
+                        <div className="meter-track">
+                          <i
+                            style={{
+                              width: `${Math.max(0, Math.min(100, block.usedPercent))}%`,
+                            }}
+                          />
+                        </div>
+                        <small>
+                          Resets{" "}
+                          {new Date(block.resetsAtMs).toLocaleString(
+                            undefined,
+                            {
+                              month: "short",
+                              day: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit",
+                            },
+                          )}
+                        </small>
                       </div>
-                      <div className="meter-track">
-                        <i
-                          style={{
-                            width: `${Math.min(100, block.usedPercent)}%`,
-                          }}
-                        />
-                      </div>
-                      <small>
-                        Resets{" "}
-                        {new Date(block.resetsAtMs).toLocaleString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </small>
-                    </div>
-                  ))}
+                    ))}
                   <small className="usage-asof">
                     Observed {new Date(usage.observedAtMs).toLocaleTimeString()}
                   </small>
                 </>
               ) : (
                 <div className="usage-unavailable">
-                  <span>Waiting for Muse usage</span>
+                  <span>
+                    {usageLoading
+                      ? "Refreshing usage…"
+                      : "No usage reported yet"}
+                  </span>
                   <small>
-                    Appears when the CLI receives your subscription limits.
+                    Muse reports limits after account activity. Refresh checks
+                    all connected conversation engines.
                   </small>
                 </div>
               )}
+              {usageError ? (
+                <small role="alert" className="usage-error">
+                  {usageError}
+                </small>
+              ) : null}
+              {usageChecked ? (
+                <small className="usage-asof">
+                  Checked {new Date(usageChecked).toLocaleTimeString()}
+                </small>
+              ) : null}
+              {!usage ? (
+                <button
+                  className="text-button"
+                  onClick={() => nativeCommand("/usage")}
+                >
+                  Open Muse usage
+                </button>
+              ) : null}
             </div>
             <div className="inspector-section">
               <h3>
@@ -2027,6 +2138,25 @@ function DesktopApp() {
             <X size={15} />
           </button>
         </div>
+      ) : null}
+      {newConversation ? (
+        <NewConversation
+          roots={workspaces}
+          initial={newConversation.initial}
+          busy={busy}
+          onClose={() => setNewConversation(null)}
+          onCreate={async (root) => {
+            const id = await run(() =>
+              createSession({ fresh: true, workspaceRoot: root }),
+            );
+            if (id) {
+              setNewConversation(null);
+              setPrompt("");
+              setImages([]);
+              textareaRef.current?.focus();
+            }
+          }}
+        />
       ) : null}
       {modal ? (
         <div
@@ -2149,6 +2279,12 @@ function DesktopApp() {
               <>
                 <span className="eyebrow">MAKE YOURSELF AT HOME</span>
                 <h2>Workspace settings</h2>
+                <div className="version-card">
+                  <MuseMark />
+                  <b>Muse Desktop</b>
+                  <span className="beta-badge">BETA</span>
+                  <code>v{appVersion}</code>
+                </div>
                 <p>
                   Connected to the same Muse Code installation as your terminal.
                 </p>
