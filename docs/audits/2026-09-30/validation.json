@@ -1,0 +1,23 @@
+{
+  "auditedAt": "2026-09-30",
+  "version": "0.5.0-beta.1",
+  "commit": "ab7f3658f8c509b984de0310b632f0d2be390da9",
+  "typecheck": "passed",
+  "backendTests": {
+    "passed": 21,
+    "failed": 0,
+    "mode": "isolated echo provider with real Muse CLI"
+  },
+  "uiTests": {
+    "passed": 28,
+    "failed": 0
+  },
+  "rendererBuild": "passed",
+  "auditObservations": 34,
+  "auditProbeErrors": 0,
+  "rendererAudit": "production bundle with test-only synthetic bridge",
+  "nativeAudit": "Electron 38.8.6, real Muse CLI, isolated echo provider and temporary data only",
+  "axeVersion": "4.13.0",
+  "windowsValidation": "Existing successful Windows CI run 36741473271; no new physical Windows user-account test during this audit",
+  "attachment": "User supplied image(7).png unavailable; not evaluated"
+}

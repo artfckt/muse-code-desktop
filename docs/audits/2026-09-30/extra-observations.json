@@ -1,0 +1,85 @@
+{
+  "baseCommit": "ab7f3658f8c509b984de0310b632f0d2be390da9",
+  "results": [
+    {
+      "id": "usage-after-native-logged-out",
+      "observation": {
+        "account": "Connect your Muse account\nMuse Code subscription",
+        "usage": "Subscription usage\nCurrent window\n45%\nResets Sep 30, 09:15 PM\nWeekly\n75%\nResets Oct 1, 08:15 PM\nObserved 8:15:42 PM\nChecked 8:15:42 PM"
+      }
+    },
+    {
+      "id": "failed-mixed-upload",
+      "observation": {
+        "savedFiles": [
+          [
+            "saveAttachment",
+            "accepted.md"
+          ],
+          [
+            "saveAttachment",
+            "unsupported.exe"
+          ]
+        ],
+        "visibleAttachments": 0,
+        "error": "Something needs attention\n\nUnsupported attachment."
+      }
+    },
+    {
+      "id": "settings-nested-select-escape",
+      "observation": {
+        "fontDropdownOpened": 1,
+        "settingsStillOpenAfterOneEscape": 0
+      }
+    },
+    {
+      "id": "no-cli-onboarding",
+      "observation": {
+        "sendEnabled": true,
+        "locateCliVisible": 0,
+        "hero": "✦✧ YOUR IDEAS. YOUR MUSE.Make room foryour next idea.A thoughtful space to build, explore, and make things happen. Powered by the Muse Code you already know.Build something newTurn an idea into working codeFind the missing pieceUnderstand, debug, and improveRefine the experienceMake every interaction feel right Same local engine. Same Muse account.",
+        "footer": "Muse needs attention\n↵ Send · ⇧ ↵ New line"
+      }
+    },
+    {
+      "id": "performance-100",
+      "observation": {
+        "messages": 100,
+        "openMs": 235,
+        "inputMs": 55,
+        "deltaBatchMs": 48,
+        "domNodes": 1631,
+        "pageErrors": []
+      }
+    },
+    {
+      "id": "performance-500",
+      "observation": {
+        "messages": 500,
+        "openMs": 565,
+        "inputMs": 214,
+        "deltaBatchMs": 189,
+        "domNodes": 7231,
+        "pageErrors": []
+      }
+    },
+    {
+      "id": "performance-2000",
+      "observation": {
+        "messages": 2000,
+        "openMs": 1791,
+        "inputMs": 695,
+        "deltaBatchMs": 653,
+        "domNodes": 28231,
+        "pageErrors": []
+      }
+    },
+    {
+      "id": "activity-layout-screenshot",
+      "observation": {
+        "detailsOutsideScroll": true,
+        "toolCards": 20
+      }
+    }
+  ]
+}

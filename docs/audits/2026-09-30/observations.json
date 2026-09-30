@@ -1,0 +1,1181 @@
+{
+  "generatedAt": "2026-09-30T19:17:35.314Z",
+  "baseCommit": "ab7f3658f8c509b984de0310b632f0d2be390da9",
+  "results": [
+    {
+      "id": "draft-cross-chat",
+      "observation": {
+        "draftInB": "Private draft intended for project A",
+        "attachmentsInB": "private-A.md",
+        "sentSessionId": "B",
+        "sentText": "Private draft intended for project A\nAttached file: private-A.md\nLocal path: /saved/image.png\nRead this local file using the native tools if needed."
+      },
+      "durationMs": 1221
+    },
+    {
+      "id": "draft-ack-loss",
+      "observation": {
+        "beforeAck": "Next message typed while request is pending",
+        "afterAck": ""
+      },
+      "durationMs": 969
+    },
+    {
+      "id": "skill-document-payload",
+      "observation": {
+        "sessionId": "session-1",
+        "text": "",
+        "skill": {
+          "selector": "plan",
+          "arguments": "follow requirements"
+        },
+        "images": [],
+        "attachmentIds": [
+          "media-1"
+        ],
+        "ifBusy": "queue"
+      },
+      "durationMs": 709
+    },
+    {
+      "id": "activity-navigation",
+      "observation": {
+        "before": "Activity",
+        "after": "Conversation"
+      },
+      "durationMs": 758
+    },
+    {
+      "id": "bootstrap-failure-spinner",
+      "observation": {
+        "loading": "Loading projects and conversations…",
+        "alert": "Something needs attentionAudit simulated unavailable bootstrap"
+      },
+      "durationMs": 1228
+    },
+    {
+      "id": "deleted-project-spinner",
+      "observation": {
+        "loading": "Loading projects and conversations…",
+        "alert": "Something needs attentionAudit simulated missing last project"
+      },
+      "durationMs": 988
+    },
+    {
+      "id": "history-response-race",
+      "observation": {
+        "selected": "Chat BJust now",
+        "breadcrumb": "A/Chat B",
+        "transcript": "MuseAssistantHistory belonging to A"
+      },
+      "durationMs": 1467
+    },
+    {
+      "id": "usage-account-and-order",
+      "observation": {
+        "newObservation": "Weekly\n75%\nResets Oct 1, 08:17 PM",
+        "olderObservation": "Weekly\n12%\nResets Oct 1, 08:17 PM",
+        "afterSignout": "Subscription usage\nWeekly\n12%\nResets Oct 1, 08:17 PM\nObserved 1:00:01 AM\nChecked 8:17:22 PM"
+      },
+      "durationMs": 618
+    },
+    {
+      "id": "settings-keyboard-focus",
+      "observation": {
+        "initial": {
+          "tag": "BUTTON",
+          "text": " Settings ⌘ ,",
+          "insideDialog": false
+        },
+        "shiftTabFromClose": {
+          "tag": "BUTTON",
+          "text": "Open Muse usage",
+          "insideDialog": false
+        }
+      },
+      "durationMs": 495
+    },
+    {
+      "id": "slash-accessibility",
+      "observation": {
+        "controlledId": "slash-menu",
+        "targetExists": false,
+        "violations": [
+          {
+            "id": "aria-valid-attr-value",
+            "impact": "critical",
+            "nodes": [
+              {
+                "target": [
+                  "textarea"
+                ],
+                "summary": "Fix all of the following:\n  Invalid ARIA attribute value: aria-controls=\"slash-menu\""
+              }
+            ]
+          },
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.19 (foreground color: #6f7971, background color: #2c2927, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              },
+              {
+                "target": [
+                  ".suggestion-grid > button:nth-child(1)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size because it is partially obscured (smallest space is 235.3px by 11.6px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 17.6px instead of at least 24px."
+              },
+              {
+                "target": [
+                  ".suggestion-grid > button:nth-child(2)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size because it is partially obscured (smallest space is 235.3px by 11.6px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 17.6px instead of at least 24px."
+              },
+              {
+                "target": [
+                  ".suggestion-grid > button:nth-child(3)"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size because it is partially obscured (smallest space is 235.3px by 11.6px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 17.6px instead of at least 24px."
+              }
+            ]
+          }
+        ]
+      },
+      "durationMs": 1088
+    },
+    {
+      "id": "a11y-muse",
+      "observation": {
+        "theme": "muse",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.19 (foreground color: #6f7971, background color: #2c2927, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1286
+    },
+    {
+      "id": "a11y-graphite",
+      "observation": {
+        "theme": "graphite",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.2 (foreground color: #7e7e7e, background color: #313131, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1280
+    },
+    {
+      "id": "a11y-paper",
+      "observation": {
+        "theme": "paper",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > b"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.45 (foreground color: #895734, background color: #e4dcd3, font size: 8.3pt (11px), font weight: normal). Expected contrast ratio of 4.5:1"
+              },
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 2.69 (foreground color: #8f8479, background color: #e4dcd3, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              },
+              {
+                "target": [
+                  ".code-toolbar > span"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 4.22 (foreground color: #72675b, background color: #e4e1db, font size: 7.5pt (10px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1288
+    },
+    {
+      "id": "a11y-midnight",
+      "observation": {
+        "theme": "midnight",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.73 (foreground color: #7385a2, background color: #262b40, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1338
+    },
+    {
+      "id": "a11y-forest",
+      "observation": {
+        "theme": "forest",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.4 (foreground color: #788a76, background color: #2c362c, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1351
+    },
+    {
+      "id": "a11y-rose",
+      "observation": {
+        "theme": "rose",
+        "fontReady": true,
+        "violations": [
+          {
+            "id": "color-contrast",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".session-row > span > small"
+                ],
+                "summary": "Fix any of the following:\n  Element has insufficient color contrast of 3.07 (foreground color: #837390, background color: #352b3e, font size: 6.8pt (9px), font weight: normal). Expected contrast ratio of 4.5:1"
+              }
+            ]
+          },
+          {
+            "id": "target-size",
+            "impact": "serious",
+            "nodes": [
+              {
+                "target": [
+                  ".workspace-collapse"
+                ],
+                "summary": "Fix any of the following:\n  Target has insufficient size (14px by 20px, should be at least 24px by 24px)\n  Target has insufficient space to its closest neighbors. Safe clickable space has a diameter of 16px instead of at least 24px."
+              }
+            ]
+          }
+        ],
+        "smallButtons": [
+          {
+            "label": "Toggle studio",
+            "rect": {
+              "w": 14,
+              "h": 20
+            }
+          },
+          {
+            "label": "/projects/studio",
+            "rect": {
+              "w": 169,
+              "h": 22
+            }
+          },
+          {
+            "label": "Copy code",
+            "rect": {
+              "w": 25,
+              "h": 18
+            }
+          },
+          {
+            "label": "Open native /mcp manager",
+            "rect": {
+              "w": 129,
+              "h": 23
+            }
+          },
+          {
+            "label": "Open Muse usage",
+            "rect": {
+              "w": 85,
+              "h": 23
+            }
+          }
+        ]
+      },
+      "durationMs": 1456
+    },
+    {
+      "id": "layout-900",
+      "observation": {
+        "viewport": 900,
+        "scrollWidth": 900,
+        "center": {
+          "x": 195,
+          "y": 42,
+          "width": 500,
+          "height": 658,
+          "top": 42,
+          "right": 695,
+          "bottom": 700,
+          "left": 195
+        },
+        "composer": {
+          "x": 207,
+          "y": 461,
+          "width": 476,
+          "height": 193,
+          "top": 461,
+          "right": 683,
+          "bottom": 654,
+          "left": 207
+        },
+        "send": {
+          "x": 625,
+          "y": 602,
+          "width": 32,
+          "height": 32,
+          "top": 602,
+          "right": 657,
+          "bottom": 634,
+          "left": 625
+        },
+        "controls": [
+          {
+            "label": "Attach files, images or videos",
+            "rect": {
+              "x": 233,
+              "y": 569.5,
+              "width": 28,
+              "height": 28,
+              "top": 569.5,
+              "right": 261,
+              "bottom": 597.5,
+              "left": 233
+            }
+          },
+          {
+            "label": "Model",
+            "rect": {
+              "x": 270,
+              "y": 568,
+              "width": 134,
+              "height": 31,
+              "top": 568,
+              "right": 404,
+              "bottom": 599,
+              "left": 270
+            }
+          },
+          {
+            "label": "Reasoning effort",
+            "rect": {
+              "x": 408,
+              "y": 568,
+              "width": 126,
+              "height": 31,
+              "top": 568,
+              "right": 534,
+              "bottom": 599,
+              "left": 408
+            }
+          },
+          {
+            "label": "Permissions",
+            "rect": {
+              "x": 233,
+              "y": 603,
+              "width": 95,
+              "height": 31,
+              "top": 603,
+              "right": 328,
+              "bottom": 634,
+              "left": 233
+            }
+          },
+          {
+            "label": "Follow-up behavior",
+            "rect": {
+              "x": 332,
+              "y": 603,
+              "width": 80,
+              "height": 31,
+              "top": 603,
+              "right": 412,
+              "bottom": 634,
+              "left": 332
+            }
+          },
+          {
+            "label": "Slash commands",
+            "rect": {
+              "x": 416,
+              "y": 604.5,
+              "width": 28,
+              "height": 28,
+              "top": 604.5,
+              "right": 444,
+              "bottom": 632.5,
+              "left": 416
+            }
+          },
+          {
+            "label": "Delegate to agents",
+            "rect": {
+              "x": 448,
+              "y": 604.5,
+              "width": 28,
+              "height": 28,
+              "top": 604.5,
+              "right": 476,
+              "bottom": 632.5,
+              "left": 448
+            }
+          },
+          {
+            "label": "Stop active turn",
+            "rect": {
+              "x": 586,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 618,
+              "bottom": 634,
+              "left": 586
+            }
+          },
+          {
+            "label": "Queue follow-up",
+            "rect": {
+              "x": 625,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 657,
+              "bottom": 634,
+              "left": 625
+            }
+          }
+        ],
+        "overflow": [
+          {
+            "class": "sidebar",
+            "clientWidth": 189,
+            "scrollWidth": 189
+          },
+          {
+            "class": "topbar",
+            "clientWidth": 500,
+            "scrollWidth": 500
+          },
+          {
+            "class": "conversation-tabs",
+            "clientWidth": 500,
+            "scrollWidth": 555
+          },
+          {
+            "class": "composer",
+            "clientWidth": 474,
+            "scrollWidth": 474
+          },
+          {
+            "class": "composer-left",
+            "clientWidth": 343,
+            "scrollWidth": 343
+          },
+          {
+            "class": "inspector",
+            "clientWidth": 199,
+            "scrollWidth": 199
+          }
+        ]
+      },
+      "durationMs": 657
+    },
+    {
+      "id": "layout-1100",
+      "observation": {
+        "viewport": 1100,
+        "scrollWidth": 1100,
+        "center": {
+          "x": 406.5,
+          "y": 42,
+          "width": 360,
+          "height": 658,
+          "top": 42,
+          "right": 766.5,
+          "bottom": 700,
+          "left": 406.5
+        },
+        "composer": {
+          "x": 426.5,
+          "y": 394,
+          "width": 320,
+          "height": 260,
+          "top": 394,
+          "right": 746.5,
+          "bottom": 654,
+          "left": 426.5
+        },
+        "send": {
+          "x": 688.5,
+          "y": 602,
+          "width": 32,
+          "height": 32,
+          "top": 602,
+          "right": 720.5,
+          "bottom": 634,
+          "left": 688.5
+        },
+        "controls": [
+          {
+            "label": "Attach files, images or videos",
+            "rect": {
+              "x": 452.5,
+              "y": 502.5,
+              "width": 28,
+              "height": 28,
+              "top": 502.5,
+              "right": 480.5,
+              "bottom": 530.5,
+              "left": 452.5
+            }
+          },
+          {
+            "label": "Model",
+            "rect": {
+              "x": 489.5,
+              "y": 501,
+              "width": 134,
+              "height": 31,
+              "top": 501,
+              "right": 623.5,
+              "bottom": 532,
+              "left": 489.5
+            }
+          },
+          {
+            "label": "Reasoning effort",
+            "rect": {
+              "x": 452.5,
+              "y": 536,
+              "width": 126,
+              "height": 31,
+              "top": 536,
+              "right": 578.5,
+              "bottom": 567,
+              "left": 452.5
+            }
+          },
+          {
+            "label": "Permissions",
+            "rect": {
+              "x": 452.5,
+              "y": 571,
+              "width": 95,
+              "height": 31,
+              "top": 571,
+              "right": 547.5,
+              "bottom": 602,
+              "left": 452.5
+            }
+          },
+          {
+            "label": "Follow-up behavior",
+            "rect": {
+              "x": 551.5,
+              "y": 571,
+              "width": 80,
+              "height": 31,
+              "top": 571,
+              "right": 631.5,
+              "bottom": 602,
+              "left": 551.5
+            }
+          },
+          {
+            "label": "Slash commands",
+            "rect": {
+              "x": 452.5,
+              "y": 606,
+              "width": 28,
+              "height": 28,
+              "top": 606,
+              "right": 480.5,
+              "bottom": 634,
+              "left": 452.5
+            }
+          },
+          {
+            "label": "Delegate to agents",
+            "rect": {
+              "x": 484.5,
+              "y": 606,
+              "width": 28,
+              "height": 28,
+              "top": 606,
+              "right": 512.5,
+              "bottom": 634,
+              "left": 484.5
+            }
+          },
+          {
+            "label": "Stop active turn",
+            "rect": {
+              "x": 649.5,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 681.5,
+              "bottom": 634,
+              "left": 649.5
+            }
+          },
+          {
+            "label": "Queue follow-up",
+            "rect": {
+              "x": 688.5,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 720.5,
+              "bottom": 634,
+              "left": 688.5
+            }
+          }
+        ],
+        "overflow": [
+          {
+            "class": "sidebar",
+            "clientWidth": 401,
+            "scrollWidth": 401
+          },
+          {
+            "class": "topbar",
+            "clientWidth": 360,
+            "scrollWidth": 360
+          },
+          {
+            "class": "conversation-tabs",
+            "clientWidth": 360,
+            "scrollWidth": 562
+          },
+          {
+            "class": "composer",
+            "clientWidth": 318,
+            "scrollWidth": 318
+          },
+          {
+            "class": "composer-left",
+            "clientWidth": 187,
+            "scrollWidth": 187
+          },
+          {
+            "class": "inspector",
+            "clientWidth": 328,
+            "scrollWidth": 328
+          }
+        ]
+      },
+      "durationMs": 700
+    },
+    {
+      "id": "layout-1440",
+      "observation": {
+        "viewport": 1440,
+        "scrollWidth": 1440,
+        "center": {
+          "x": 425,
+          "y": 42,
+          "width": 590,
+          "height": 658,
+          "top": 42,
+          "right": 1015,
+          "bottom": 700,
+          "left": 425
+        },
+        "composer": {
+          "x": 445,
+          "y": 461,
+          "width": 550,
+          "height": 193,
+          "top": 461,
+          "right": 995,
+          "bottom": 654,
+          "left": 445
+        },
+        "send": {
+          "x": 937,
+          "y": 602,
+          "width": 32,
+          "height": 32,
+          "top": 602,
+          "right": 969,
+          "bottom": 634,
+          "left": 937
+        },
+        "controls": [
+          {
+            "label": "Attach files, images or videos",
+            "rect": {
+              "x": 471,
+              "y": 569.5,
+              "width": 28,
+              "height": 28,
+              "top": 569.5,
+              "right": 499,
+              "bottom": 597.5,
+              "left": 471
+            }
+          },
+          {
+            "label": "Model",
+            "rect": {
+              "x": 508,
+              "y": 568,
+              "width": 134,
+              "height": 31,
+              "top": 568,
+              "right": 642,
+              "bottom": 599,
+              "left": 508
+            }
+          },
+          {
+            "label": "Reasoning effort",
+            "rect": {
+              "x": 646,
+              "y": 568,
+              "width": 126,
+              "height": 31,
+              "top": 568,
+              "right": 772,
+              "bottom": 599,
+              "left": 646
+            }
+          },
+          {
+            "label": "Permissions",
+            "rect": {
+              "x": 776,
+              "y": 568,
+              "width": 95,
+              "height": 31,
+              "top": 568,
+              "right": 871,
+              "bottom": 599,
+              "left": 776
+            }
+          },
+          {
+            "label": "Follow-up behavior",
+            "rect": {
+              "x": 471,
+              "y": 603,
+              "width": 80,
+              "height": 31,
+              "top": 603,
+              "right": 551,
+              "bottom": 634,
+              "left": 471
+            }
+          },
+          {
+            "label": "Slash commands",
+            "rect": {
+              "x": 555,
+              "y": 604.5,
+              "width": 28,
+              "height": 28,
+              "top": 604.5,
+              "right": 583,
+              "bottom": 632.5,
+              "left": 555
+            }
+          },
+          {
+            "label": "Delegate to agents",
+            "rect": {
+              "x": 587,
+              "y": 604.5,
+              "width": 28,
+              "height": 28,
+              "top": 604.5,
+              "right": 615,
+              "bottom": 632.5,
+              "left": 587
+            }
+          },
+          {
+            "label": "Stop active turn",
+            "rect": {
+              "x": 898,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 930,
+              "bottom": 634,
+              "left": 898
+            }
+          },
+          {
+            "label": "Queue follow-up",
+            "rect": {
+              "x": 937,
+              "y": 602,
+              "width": 32,
+              "height": 32,
+              "top": 602,
+              "right": 969,
+              "bottom": 634,
+              "left": 937
+            }
+          }
+        ],
+        "overflow": [
+          {
+            "class": "sidebar",
+            "clientWidth": 419,
+            "scrollWidth": 419
+          },
+          {
+            "class": "topbar",
+            "clientWidth": 590,
+            "scrollWidth": 590
+          },
+          {
+            "class": "conversation-tabs",
+            "clientWidth": 590,
+            "scrollWidth": 590
+          },
+          {
+            "class": "composer",
+            "clientWidth": 548,
+            "scrollWidth": 548
+          },
+          {
+            "class": "composer-left",
+            "clientWidth": 417,
+            "scrollWidth": 417
+          },
+          {
+            "class": "inspector",
+            "clientWidth": 419,
+            "scrollWidth": 419
+          }
+        ]
+      },
+      "durationMs": 759
+    },
+    {
+      "id": "agent-loading-and-system-theme",
+      "observation": {
+        "loading": {
+          "body": "\n    Muse AgentAgent childLive conversationParent  · Agent controls and follow-up messages are available in the parent conversation’s Agents tab.Waiting for this agent’s first message…\n  \n\n",
+          "loaders": 0,
+          "theme": "paper"
+        },
+        "dark": "paper",
+        "light": "paper"
+      },
+      "durationMs": 750
+    }
+  ]
+}

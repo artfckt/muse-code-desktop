@@ -1,0 +1,60 @@
+{
+  "baseCommit": "ab7f3658f8c509b984de0310b632f0d2be390da9",
+  "results": [
+    {
+      "id": "text-excerpt",
+      "observation": {
+        "originalLength": 100017,
+        "excerptLength": 100000,
+        "excerptContainsEnd": false,
+        "originalFileContainsEnd": true,
+        "hasTruncationField": false
+      }
+    },
+    {
+      "id": "corrupt-attachment-manifest",
+      "observation": {
+        "savedFileStillExists": true,
+        "filesRecognized": 0,
+        "sessionsRecognized": 0
+      }
+    },
+    {
+      "id": "retained-hosts",
+      "observation": {
+        "visitedChats": 20,
+        "createdHosts": 21,
+        "retainedSessionHosts": 20,
+        "closedWhileBrowsing": 0
+      }
+    },
+    {
+      "id": "native-versions",
+      "observation": {
+        "electron": "38.8.6",
+        "chrome": "140.0.7339.249",
+        "node": "22.22.0"
+      }
+    },
+    {
+      "id": "no-folder-terminal-context",
+      "observation": {
+        "resumedNoFolder": true,
+        "resumedWorkspace": "",
+        "terminalCwd": "/tmp/muse-audit-isolated-P0ljWY/project-A",
+        "previousProject": "/tmp/muse-audit-isolated-P0ljWY/project-A",
+        "matchesPreviousProject": true
+      }
+    },
+    {
+      "id": "cross-origin-local-media-read",
+      "observation": {
+        "origin": "null",
+        "status": 200,
+        "bytes": 68,
+        "fixtureBytes": 68,
+        "fixtureOutsideSavedAttachments": true
+      }
+    }
+  ]
+}
