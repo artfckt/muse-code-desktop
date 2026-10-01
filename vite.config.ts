@@ -16,6 +16,12 @@ export default defineConfig(({ command }) => ({
     },
   ],
   base: "./",
+  server: {
+    watch: {
+      ignored: ["**/.build-cache/**", "**/release/**"],
+      followSymlinks: false,
+    },
+  },
   optimizeDeps: { include: ["@xterm/xterm", "@xterm/addon-fit"] },
   build: {
     outDir: "dist",
