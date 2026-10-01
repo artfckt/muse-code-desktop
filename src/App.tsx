@@ -1990,7 +1990,6 @@ function DesktopApp() {
             ) : null}
             <textarea
               ref={textareaRef}
-              rows={1}
               aria-label="Message Muse"
               placeholder={
                 working
@@ -2043,7 +2042,7 @@ function DesktopApp() {
                   void sendPrompt();
                 }
               }}
-              rows={2}
+              rows={1}
             />
             <div className="composer-controls">
               <div className="composer-left">
