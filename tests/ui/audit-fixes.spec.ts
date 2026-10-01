@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "node:path";
+import { version } from "../../package.json";
 test.beforeEach(async ({ page }) => {
   await page.addInitScript({ path: path.resolve("tests/ui/mock.cjs") });
   await page.goto("/");
@@ -375,7 +376,7 @@ test("agent view has loading, beta version, and latest-message navigation", asyn
   await expect(
     page.getByText("Agent message 119", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".window-bar")).toContainText("0.8.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText(version);
   await page.locator(".chat-scroll").evaluate((element) => {
     element.scrollTop = 0;
   });
