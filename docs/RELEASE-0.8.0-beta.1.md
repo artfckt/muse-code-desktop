@@ -35,4 +35,12 @@ A conversation with two messages and 500 activities opened in 101 ms with no exp
 
 The installer is unsigned and requires an installed Muse Code CLI. Authentication and subscription usage stay with the native runtime. Visible commentary uses actual Muse messages and supplied reasoning summaries; models that omit commentary still show action and agent status. Live account-specific quotas, paid model behavior and OS notification delivery were not exercised with a real account. Update installation remains manual.
 
-Windows workflow and installer verification are recorded with the published release.
+## Windows release verification
+
+[Windows CI run 36851038319](https://github.com/artfckt/muse-code-desktop/actions/runs/36851038319) passed for source commit `5c1cf3b4d1e8582acde5c03ae315d1eb7fdb12d8`: typecheck, 36 tests with four native echo tests skipped because the isolated Muse executable was unavailable, all 65 UI tests, Windows packaging and the packaged Electron/preload/media/PTY smoke check. System font discovery includes Segoe UI, and the Windows N-API PTY prebuilds used by the VPS installer load in Electron.
+
+The installer was built on the VPS, extracted and checked as Windows x64. All 156 packaged source and renderer files match the tested files; all three native PTY bindings match the pinned Windows package. The uploaded installer was downloaded again from GitHub and compared byte for byte. Windows CI independently exercises the same app source and PTY prebuilds; the exact VPS NSIS installer was not installed interactively on a Windows machine.
+
+- File: `Muse-Desktop-0.8.0-beta.1-Windows-x64.exe`
+- Size: 151,943,411 bytes
+- SHA-256: `3ddfeec6e50657ec99feea0b14163f4c5252b93387c2472d9af7cc1d19f55243`
