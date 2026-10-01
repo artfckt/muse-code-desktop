@@ -59,8 +59,18 @@ test(
       );
       assert.ok(terminal.buffer.includes("Trust and continue"));
     } finally {
+      const process = terminal.process;
+      const exited = process
+        ? new Promise((resolve) => process.onExit(resolve))
+        : Promise.resolve();
       terminal.close();
-      fs.rmSync(home, { recursive: true, force: true });
+      await exited;
+      fs.rmSync(home, {
+        recursive: true,
+        force: true,
+        maxRetries: 20,
+        retryDelay: 100,
+      });
     }
   },
 );
