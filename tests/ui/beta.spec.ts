@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 import path from "node:path";
+import { version } from "../../package.json";
 test.beforeEach(async ({ page }) => {
   await page.addInitScript({ path: path.resolve("tests/ui/mock.cjs") });
   await page.goto("/");
@@ -9,7 +10,7 @@ test("new conversation supports no folder and a newly chosen project", async ({
   page,
 }) => {
   await expect(page.locator(".window-bar")).toContainText("BETA");
-  await expect(page.locator(".window-bar")).toContainText("0.8.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText(version);
   await expect(
     page.getByRole("button", { name: /Open a project/ }),
   ).toHaveCount(0);

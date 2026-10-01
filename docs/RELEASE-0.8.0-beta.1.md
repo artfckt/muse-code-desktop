@@ -44,3 +44,9 @@ The installer was built on the VPS, extracted and checked as Windows x64. All 15
 - File: `Muse-Desktop-0.8.0-beta.1-Windows-x64.exe`
 - Size: 151,943,411 bytes
 - SHA-256: `3ddfeec6e50657ec99feea0b14163f4c5252b93387c2472d9af7cc1d19f55243`
+
+## Post-release Windows verification (2026-10-01)
+
+The published installer was downloaded from the tagged GitHub release on Windows 10.0.26200 x64. Its size and SHA-256 matched the values above, and Windows reported the expected unsigned signature status. A silent per-user installation to an isolated directory completed with exit code 0. The installed executable then passed the packaged Electron smoke test, including the production renderer, sandboxed preload, local media protocol, system font discovery, agent-window isolation, Muse Code 1.4.1 echo-provider chat/resume flows and all three Windows x64 PTY bindings. The native Windows notification API reported support and accepted a silent test notification. A forced update check reached GitHub, selected `0.8.0-beta.1` and correctly reported no newer release.
+
+The existing Muse CLI session was detected through a read-only account check without starting a new login. No real-account chat, paid model, quota consumption or manual notification-click behavior was exercised. The installer flow was automated and silent rather than a manual click-through.
