@@ -274,7 +274,10 @@ class DesktopEngine {
     host.inFlight = (host.inFlight || 0) + 1;
     let result;
     try {
-      result = await host.command(method, params);
+      result =
+        method === "session/resume"
+          ? await host.query("session/read", { ...params, excludeItems: false })
+          : await host.command(method, params);
     } finally {
       host.inFlight--;
     }
@@ -303,7 +306,7 @@ class DesktopEngine {
       : result;
   }
   async resumeNewHost(params) {
-    await this.pruneIdleHosts();
+    const pruning = this.pruneIdleHosts().catch(() => {});
     const host = this.newHost(this.policies[params.sessionId] || "standard");
     host.setOwner(params.sessionId);
     try {
@@ -314,6 +317,7 @@ class DesktopEngine {
         this.sessionRoots.set(params.sessionId, host.workspace);
       this.sessions.set(params.sessionId, host);
       this.registerChildren(result, params.sessionId);
+      await pruning;
       return {
         ...result,
         session: result.session

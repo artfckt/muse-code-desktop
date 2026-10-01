@@ -1,4 +1,7 @@
 export type DesktopPreferences = {
+  sidebarCollapsed: boolean;
+  checkUpdates: boolean;
+  updateNotifications: boolean;
   font: string;
   chatSize: number;
   uiSize: number;
@@ -20,6 +23,9 @@ export type DesktopPreferences = {
   colors: Record<string, string>;
 };
 export const defaultPreferences: DesktopPreferences = {
+  sidebarCollapsed: false,
+  checkUpdates: true,
+  updateNotifications: true,
   font: "DM Sans",
   chatSize: 14,
   uiSize: 12,
@@ -62,6 +68,9 @@ export function normalizePreferences(
 ): DesktopPreferences {
   const result = { ...defaultPreferences };
   for (const name of [
+    "sidebarCollapsed",
+    "checkUpdates",
+    "updateNotifications",
     "compact",
     "animations",
     "notifications",
@@ -102,7 +111,6 @@ export function normalizePreferences(
       "medium",
       "high",
       "xhigh",
-      "max",
       "ultra",
     ].includes(raw.defaultReasoning || "")
   )
@@ -146,4 +154,16 @@ export function applyPreferences(value: DesktopPreferences) {
   for (const [name, color] of Object.entries(value.colors))
     if (/^#[\da-f]{6}$/i.test(color))
       root.style.setProperty(`--${name}`, color);
+}
+
+export function resetAppearance(value: DesktopPreferences): DesktopPreferences {
+  return {
+    ...value,
+    font: defaultPreferences.font,
+    chatSize: defaultPreferences.chatSize,
+    uiSize: defaultPreferences.uiSize,
+    codeSize: defaultPreferences.codeSize,
+    lineHeight: defaultPreferences.lineHeight,
+    colors: {},
+  };
 }

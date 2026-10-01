@@ -9,7 +9,7 @@ test("new conversation supports no folder and a newly chosen project", async ({
   page,
 }) => {
   await expect(page.locator(".window-bar")).toContainText("BETA");
-  await expect(page.locator(".window-bar")).toContainText("0.6.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText("0.7.0-beta.1");
   await expect(
     page.getByRole("button", { name: /Open a project/ }),
   ).toHaveCount(0);

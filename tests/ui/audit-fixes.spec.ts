@@ -375,7 +375,7 @@ test("agent view has loading, beta version, and latest-message navigation", asyn
   await expect(
     page.getByText("Agent message 119", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".window-bar")).toContainText("0.6.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText("0.7.0-beta.1");
   await page.locator(".chat-scroll").evaluate((element) => {
     element.scrollTop = 0;
   });

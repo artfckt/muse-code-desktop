@@ -5,6 +5,7 @@ for (const theme of themes)
   test(`readable metadata and accessible controls in ${theme}`, async ({
     page,
   }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript({ path: path.resolve("tests/ui/mock.cjs") });
     await page.goto("/");
     await expect(page.getByText("Using your CLI sign-in")).toBeVisible();
@@ -60,6 +61,7 @@ for (const width of [900, 1100, 1440])
   test(`large typography and wide panels keep controls accessible at ${width}px`, async ({
     page,
   }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript({ path: path.resolve("tests/ui/mock.cjs") });
     await page.addInitScript(() =>
       localStorage.setItem(

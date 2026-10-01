@@ -32,6 +32,7 @@ contextBridge.exposeInMainWorld("muse", {
   subscribeSession: invoke("subscribe-session"),
   onNavigateSession: subscribe("navigate-session"),
   setWindowTheme: invoke("window-theme"),
+  checkUpdates: invoke("check-updates"),
   bootstrap: invoke("bootstrap"),
   diagnose: invoke("diagnose"),
   login: invoke("login"),

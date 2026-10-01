@@ -7,6 +7,7 @@ export type SelectOption = {
   label: string;
   description?: string;
   disabled?: boolean;
+  fontFamily?: string;
 };
 export function Select({
   label,
@@ -156,7 +157,15 @@ export function Select({
           }
         }}
       >
-        <span>{selected?.label || label}</span>
+        <span
+          style={
+            selected?.fontFamily
+              ? { fontFamily: `"${selected.fontFamily}", sans-serif` }
+              : undefined
+          }
+        >
+          {selected?.label || label}
+        </span>
         <ChevronDown size={12} />
       </button>
       {open &&
@@ -176,6 +185,12 @@ export function Select({
                 data-index={index}
                 className={`select-option ${focus === index ? "focused" : ""}`}
                 role="option"
+                aria-label={option.fontFamily ? option.label : undefined}
+                style={
+                  option.fontFamily
+                    ? { fontFamily: `"${option.fontFamily}", sans-serif` }
+                    : undefined
+                }
                 aria-selected={value === option.value}
                 aria-disabled={option.disabled || undefined}
                 onPointerMove={() => setFocus(index)}
@@ -184,6 +199,11 @@ export function Select({
               >
                 <span>
                   <b>{option.label}</b>
+                  {option.fontFamily && (
+                    <small className="font-option-preview" aria-hidden="true">
+                      Aa Bb 012345 · The quick brown fox
+                    </small>
+                  )}
                   {option.description && <small>{option.description}</small>}
                 </span>
                 {value === option.value && <Check size={13} />}

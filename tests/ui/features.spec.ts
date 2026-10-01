@@ -208,6 +208,7 @@ test("native agents have separate windows and follow-up controls", async ({
   await page
     .getByRole("button", { name: "Open Researcher separately" })
     .click();
+  await page.getByRole("button", { name: "Manage Researcher" }).click();
   await page
     .getByRole("textbox", { name: "Message Researcher" })
     .fill("Check tests too");
@@ -265,6 +266,7 @@ test("session usage details, MCP inventory and completion notifications use nati
 }) => {
   await expect(page.getByText("project-tools", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: /^Settings/ }).click();
+  await page.getByRole("tab", { name: "Notifications", exact: true }).click();
   await page
     .getByRole("checkbox", { name: "Notify while the app is focused" })
     .check();

@@ -1373,10 +1373,9 @@ body {
   grid-template-columns: min(var(--left-width, 232px), 34vw) 5px minmax(0, 1fr);
 }
 .app-shell:has(.inspector) {
-  grid-template-columns: min(
-      var(--left-width, 232px),
-      calc((100vw - 510px) * 0.48)
-    ) 5px minmax(500px, 1fr) 5px min(
+  grid-template-columns:
+    min(var(--left-width, 232px), calc((100vw - 510px) * 0.48))
+    5px minmax(500px, 1fr) 5px min(
       var(--right-width, 248px),
       calc((100vw - 510px) * 0.52)
     );

@@ -209,15 +209,13 @@ const os = require("node:os");
         });
         await new Promise((resolve, reject) => {
           const transaction = database.transaction("drafts", "readwrite");
-          transaction
-            .objectStore("drafts")
-            .put(
-              {
-                text: "SYNTHETIC_OTHER_SESSION",
-                images: [{ frames: [{ base64Data: "SYNTHETIC_BYTES" }] }],
-              },
-              "isolation-probe",
-            );
+          transaction.objectStore("drafts").put(
+            {
+              text: "SYNTHETIC_OTHER_SESSION",
+              images: [{ frames: [{ base64Data: "SYNTHETIC_BYTES" }] }],
+            },
+            "isolation-probe",
+          );
           transaction.oncomplete = resolve;
           transaction.onerror = reject;
         });

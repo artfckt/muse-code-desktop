@@ -2,8 +2,23 @@ import { createContext, useContext, useEffect, useRef, useState } from "react";
 import ReactMarkdown, { defaultUrlTransform } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
-import rehypeKatex from "rehype-katex";
-import hljs from "highlight.js";
+let katexRequest: Promise<any> | undefined;
+const mediaRequests = new Map<string, Promise<string>>();
+function grantedMedia(src: string, sessionId?: string) {
+  const key = `${sessionId || ""}:${src}`;
+  let request = mediaRequests.get(key);
+  if (!request) {
+    request = window.muse.resolveMedia(src, sessionId).catch((error) => {
+      mediaRequests.delete(key);
+      throw error;
+    });
+    mediaRequests.set(key, request);
+    if (mediaRequests.size > 100)
+      mediaRequests.delete(mediaRequests.keys().next().value!);
+  }
+  return request;
+}
+import hljs from "highlight.js/lib/common";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import "katex/dist/katex.min.css";
 
@@ -44,16 +59,34 @@ export function SafeMedia({ src, kind = "image", ...props }: any) {
     if (/^https?:|^data:image\/(png|jpeg|gif|webp);base64,/i.test(src || ""))
       setResolved(src);
     else if (src)
-      void window.muse
-        .resolveMedia(src, sessionId)
+      void grantedMedia(src, sessionId)
         .then((url) => {
           if (alive) setResolved(url);
         })
         .catch((error) => {
           if (alive) setError(error.message);
         });
+    const retry = (event: Event) => {
+      if (
+        (event as CustomEvent).detail !== sessionId ||
+        !src ||
+        /^https?:|^data:/i.test(src)
+      )
+        return;
+      mediaRequests.delete(`${sessionId || ""}:${src}`);
+      void grantedMedia(src, sessionId)
+        .then((url) => {
+          if (alive) {
+            setResolved(url);
+            setError("");
+          }
+        })
+        .catch(() => {});
+    };
+    window.addEventListener("muse-media-ready", retry);
     return () => {
       alive = false;
+      window.removeEventListener("muse-media-ready", retry);
     };
   }, [src, sessionId]);
   if (error)
@@ -228,10 +261,27 @@ export function Markdown({
   text: string;
   workspace?: string;
 }) {
+  const [katex, setKatex] = useState<any>(null);
+  const hasMath = /\$[^\n$]+\$|\$\$/.test(text);
+  useEffect(() => {
+    if (!hasMath) return;
+    let alive = true;
+    katexRequest ||= import("rehype-katex").then((module) => module.default);
+    void katexRequest
+      .then((plugin) => {
+        if (alive) setKatex(() => plugin);
+      })
+      .catch(() => {
+        katexRequest = undefined;
+      });
+    return () => {
+      alive = false;
+    };
+  }, [hasMath]);
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
+      rehypePlugins={katex && hasMath ? [katex] : []}
       urlTransform={(value) =>
         isLocal(value) || value.startsWith("muse-media:")
           ? value

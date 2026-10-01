@@ -156,7 +156,7 @@ test("resume preserves chronological order and ignores other sessions", async ({
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
   await page.getByRole("button", { name: "Create conversation" }).click();
-  await page.getByRole("button", { name: /New conversation Just now/ }).click();
+  await page.locator(".session-row").filter({hasText:"New conversation"}).click();
   await expect(page.locator(".user-message")).toHaveText("Earlier question");
   await expect(page.locator(".assistant-message")).toContainText(
     "Earlier answer",
@@ -184,6 +184,7 @@ test("unknown usage is explicit and runtime settings are accessible", async ({
   await expect(page.getByText("No usage reported yet")).toBeVisible();
   await page.getByRole("button", { name: "Settings Ctrl ," }).click();
   await expect(page.getByRole("dialog", { name: "Settings" })).toBeVisible();
+  await page.getByRole("tab", { name: "Account & runtime" }).click();
   await expect(page.getByRole("button", { name: "Locate CLI" })).toBeVisible();
 });
 test("native Muse terminal stays mounted when switching back to GUI", async ({

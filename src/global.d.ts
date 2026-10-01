@@ -51,6 +51,10 @@ declare global {
       terminalRestart(): Promise<any>;
       onTerminalData(listener: (data: string) => void): () => void;
       onTerminalExit(listener: (exit: any) => void): () => void;
+      checkUpdates(options?: {
+        force?: boolean;
+        notify?: boolean;
+      }): Promise<any>;
       bootstrap(): Promise<any>;
       diagnose(): Promise<any>;
       login(): Promise<any>;

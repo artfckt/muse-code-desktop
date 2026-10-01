@@ -448,3 +448,30 @@ test("terminal context retains the actual standalone root after resuming a no-fo
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+test("returning to an owned session reads its warm host without resuming or spawning again", async () => {
+  const { engine, hosts } = fixture();
+  const { sessionId } = await engine.startSession();
+  const queries = [],
+    commands = [];
+  hosts[1].query = async (method, params) => {
+    queries.push([method, params]);
+    return {
+      session: { sessionId, workspaceRoot: "workspace" },
+      history: { items: [] },
+    };
+  };
+  hosts[1].command = async (method) => {
+    commands.push(method);
+    throw new Error("A warm resume must not issue another lease command");
+  };
+  const result = await engine.command("session/resume", { sessionId });
+  assert.equal(hosts.length, 2);
+  assert.deepEqual(commands, []);
+  assert.deepEqual(queries, [
+    ["session/read", { sessionId, excludeItems: false }],
+  ]);
+  assert.equal(result.permissionProfile, "standard");
+  assert.equal(result.session.sessionId, sessionId);
+  assert.equal(hosts[1].inFlight, 0);
+});

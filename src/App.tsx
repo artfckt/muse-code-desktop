@@ -6,6 +6,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  useMemo,
 } from "react";
 import {
   ArrowDown,
@@ -41,6 +42,15 @@ import {
   Zap,
   Users,
 } from "lucide-react";
+import {
+  cacheConversation,
+  cachedConversation,
+  cachedIndex,
+  cacheIndex,
+  clearConversationCache,
+} from "./session-cache";
+import { WorkspaceSidebar } from "./WorkspaceSidebar";
+import { SettingsPanel } from "./SettingsPanel";
 import { useDrafts } from "./useDrafts";
 import { Modal } from "./Modal";
 import { Select } from "./Select";
@@ -51,6 +61,7 @@ import {
   readPreferences,
   savePreferences,
   applyPreferences,
+  resetAppearance,
 } from "./desktop-preferences";
 import { SafeMedia } from "./RichContent";
 import { prepareAttachment, attachmentContext, type Attachment } from "./media";
@@ -59,6 +70,7 @@ import {
   ConversationTimeline,
   SessionDetails,
   AgentsPanel,
+  ActivityPanel,
   McpPanel,
 } from "./SessionPanels";
 import {
@@ -95,7 +107,6 @@ const efforts = [
   "medium",
   "high",
   "xhigh",
-  "max",
   "ultra",
 ];
 const modes = [
@@ -211,6 +222,8 @@ function DesktopApp() {
     preferences.defaultPermissions,
   );
   const [workspaces, setWorkspaces] = useState<string[]>([]);
+  const workspaceListRef = useRef(workspaces);
+  workspaceListRef.current = workspaces;
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [hiddenHistory, setHiddenHistory] = useState<{
     chats: string[];
@@ -254,6 +267,10 @@ function DesktopApp() {
   const [usageError, setUsageError] = useState("");
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
+  const [sessionRefreshing, setSessionRefreshing] = useState(false);
+  const [updates, setUpdates] = useState<any>(null);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  const [settingsCategory, setSettingsCategory] = useState("appearance");
   const [uploading, setUploading] = useState(false);
   const [showLatest, setShowLatest] = useState(false);
   const [newConversation, setNewConversation] = useState<{
@@ -297,6 +314,13 @@ function DesktopApp() {
   const stores = useRef(new Map<string, Transcript>());
   const sessionsRequest = useRef<Promise<void> | null>(null);
   const sessionsRefreshAgain = useRef(false);
+  const sessionSnapshots = useRef(new Map<string, any>());
+  const sessionExtras = useRef(
+    new Map<string, { models: any[]; skills: any[]; at: number }>(),
+  );
+  const itemFrame = useRef<number | null>(null);
+  const cacheTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sidebarLoaded = useRef(false);
   const buffering = useRef(new Map<string, MuseEvent[]>());
   const loadGeneration = useRef(0);
   const usageGeneration = useRef(0);
@@ -328,17 +352,6 @@ function DesktopApp() {
           command.name.toLowerCase().includes(prompt.slice(1).toLowerCase()),
         )
     : [];
-  const groupedWorkspaces = [
-    ...new Set([
-      ...workspaces,
-      workspace,
-      ...sessions.map((row) => row.workspaceRoot || ""),
-    ]),
-  ].filter(
-    (root) =>
-      (search || showArchived || !hiddenHistory.roots.includes(root)) &&
-      (root || sessions.some((row) => !row.workspaceRoot)),
-  );
   const account = diagnostic?.account;
   const signedIn = account?.state === "accountLogin";
   const accountName = signedIn
@@ -350,8 +363,12 @@ function DesktopApp() {
         : diagnostic
           ? "Muse CLI unavailable"
           : "Checking your account…";
-  const tasks = items.filter(
-    (item) => !["userMessage", "agentMessage"].includes(item.kind),
+  const tasks = useMemo(
+    () =>
+      items.filter(
+        (item) => !["userMessage", "agentMessage"].includes(item.kind),
+      ),
+    [items],
   );
   const showItems = tab === "activity" ? tasks : items;
 
@@ -377,11 +394,13 @@ function DesktopApp() {
       return sessionsRequest.current;
     }
     setSessionsLoading(true);
+    sidebarLoaded.current = true;
     const request = window.muse
       .listSessions()
       .then((raw) =>
         setSessions((prev) => {
           const rows = raw.sessions || [];
+          void cacheIndex(rows, workspaceListRef.current);
           const selected = prev.find(
             (row) => row.sessionId === activeRef.current,
           );
@@ -435,6 +454,78 @@ function DesktopApp() {
       if (generation === usageGeneration.current) setUsageLoading(false);
     }
   }, []);
+  const checkUpdates = useCallback(async (force = false) => {
+    if (!window.muse?.checkUpdates) return;
+    setCheckingUpdates(true);
+    try {
+      setUpdates(
+        await window.muse.checkUpdates({
+          force,
+          notify: preferencesRef.current.updateNotifications,
+        }),
+      );
+    } catch (error: any) {
+      setUpdates((prev: any) => ({ ...prev, error: error.message }));
+    } finally {
+      setCheckingUpdates(false);
+    }
+  }, []);
+  useEffect(() => {
+    void cachedIndex().then((cached) => {
+      if (cached && !sidebarLoaded.current) {
+        setSessions(cached.sessions);
+        setWorkspaces(cached.workspaces);
+      }
+    });
+  }, []);
+  useEffect(() => {
+    if (!preferences.checkUpdates) return;
+    const start = setTimeout(() => void checkUpdates(), 5000);
+    const timer = setInterval(() => void checkUpdates(), 6 * 3600000);
+    return () => {
+      clearTimeout(start);
+      clearInterval(timer);
+    };
+  }, [preferences.checkUpdates, checkUpdates]);
+  function chooseTheme(id: string) {
+    setPreferences((prev) => resetAppearance(prev));
+    setThemePreference(id);
+  }
+  function settingsAt(category = "appearance") {
+    setSettingsCategory(category);
+    setModal("settings");
+  }
+  function persistTranscript(id: string) {
+    const held = stores.current.get(id),
+      snapshot = sessionSnapshots.current.get(id);
+    const row =
+      snapshot?.session ||
+      sessions.find((row) => row.sessionId === id) ||
+      (id === activeRef.current
+        ? { sessionId: id, workspaceRoot: workspaceRef.current, modelId }
+        : null);
+    if (held && row)
+      void cacheConversation({
+        id,
+        items: held.list(),
+        session: row,
+        cachedAt: Date.now(),
+      });
+  }
+  function publishItems(id: string) {
+    if (itemFrame.current != null) return;
+    itemFrame.current = requestAnimationFrame(() => {
+      itemFrame.current = null;
+      const active = activeRef.current;
+      if (active && !buffering.current.has(active))
+        setItems(storeFor(active).list());
+    });
+    if (cacheTimer.current) clearTimeout(cacheTimer.current);
+    cacheTimer.current = setTimeout(
+      () => persistTranscript(activeRef.current),
+      750,
+    );
+  }
   async function run(action: () => Promise<any>) {
     setBusy(true);
     setError("");
@@ -464,7 +555,19 @@ function DesktopApp() {
     setNextCursor(null);
   }
   function storeFor(id: string) {
-    if (!stores.current.has(id)) stores.current.set(id, new Transcript());
+    if (!stores.current.has(id)) {
+      stores.current.set(id, new Transcript());
+      if (stores.current.size > 12) {
+        const oldest = [...stores.current.keys()].find(
+          (key) => key !== id && key !== activeRef.current && !turns[key],
+        );
+        if (oldest) {
+          stores.current.delete(oldest);
+          sessionSnapshots.current.delete(oldest);
+          sessionExtras.current.delete(oldest);
+        }
+      }
+    }
     return stores.current.get(id)!;
   }
   async function hydrateWorkspace(cwd: string) {
@@ -543,15 +646,37 @@ function DesktopApp() {
     return id;
   }
   async function loadSession(id: string) {
+    if (
+      id === activeRef.current &&
+      !sessionRefreshing &&
+      stores.current.has(id) &&
+      sessionSnapshots.current.has(id)
+    )
+      return;
     const generation = ++loadGeneration.current;
     const row = sessions.find((entry) => entry.sessionId === id);
     workspaceRef.current = row?.workspaceRoot || "";
     selectSession(id);
     setWorkspace(workspaceRef.current);
-    setMessagesLoading(true);
+    const warm = stores.current.get(id);
+    const held = sessionSnapshots.current.get(id);
+    setMessagesLoading(!warm);
+    setSessionRefreshing(true);
     setError("");
     setTab("conversation");
-    setItems([]);
+    setItems(warm?.list() || []);
+    if (held) {
+      setModelId(held.session?.modelId || "");
+      setPermissionProfile(held.permissionProfile || "standard");
+    }
+    void cachedConversation(id).then((cached) => {
+      if (!warm && cached && current() && buffering.current.has(id)) {
+        const store = storeFor(id);
+        store.seed(cached.items);
+        setItems(store.list());
+        setMessagesLoading(false);
+      }
+    });
     setSkills([]);
     setPending({ approvals: [], userInputs: [] });
     buffering.current.set(id, []);
@@ -581,6 +706,9 @@ function DesktopApp() {
       for (const event of buffering.current.get(id) || []) store.apply(event);
       buffering.current.delete(id);
       setItems(store.list());
+      sessionSnapshots.current.set(id, result);
+      persistTranscript(id);
+      window.dispatchEvent(new CustomEvent("muse-media-ready", { detail: id }));
       setReadOnly(readonly);
       if (readonly)
         setStatus(
@@ -618,20 +746,37 @@ function DesktopApp() {
         [id]:
           result.session?.activeTurnId || snapshot?.activeTurn?.turnId || null,
       }));
+      const extras = sessionExtras.current.get(id);
+      if (extras) {
+        setModels(extras.models);
+        setSkills(extras.skills);
+      }
       void Promise.allSettled([
         refreshPending(),
-        refreshUsage(),
         window.muse
           .sessionMedia(id)
           .then((saved) =>
             setMedia((previous) => ({ ...previous, [id]: saved })),
           ),
-        window.muse.listModels(id).then((raw) => {
-          if (current()) setModels(raw.models || []);
-        }),
-        window.muse.listSkills(id).then((raw) => {
-          if (current()) setSkills(raw.skills || []);
-        }),
+        ...(!extras || Date.now() - extras.at > 60000
+          ? [
+              Promise.all([
+                window.muse.listModels(id),
+                window.muse.listSkills(id),
+              ]).then(([models, skills]) => {
+                const next = {
+                  models: models.models || [],
+                  skills: skills.skills || [],
+                  at: Date.now(),
+                };
+                sessionExtras.current.set(id, next);
+                if (current()) {
+                  setModels(next.models);
+                  setSkills(next.skills);
+                }
+              }),
+            ]
+          : []),
       ]);
     } catch (error: any) {
       if (current()) {
@@ -644,6 +789,7 @@ function DesktopApp() {
       if (current()) {
         buffering.current.delete(id);
         setMessagesLoading(false);
+        setSessionRefreshing(false);
       }
     }
   }
@@ -717,6 +863,7 @@ function DesktopApp() {
       busy ||
       uploading ||
       readOnly ||
+      sessionRefreshing ||
       messagesLoading ||
       !diagnostic?.connected ||
       !signedIn
@@ -937,6 +1084,15 @@ function DesktopApp() {
           setUsageChecked(null);
           setUsageLoading(false);
         }
+        if (
+          accountIdentity.current !== null &&
+          accountIdentity.current !== identity
+        ) {
+          stores.current.clear();
+          sessionSnapshots.current.clear();
+          sessionExtras.current.clear();
+          void clearConversationCache().catch(() => {});
+        }
         accountIdentity.current = identity;
         setDiagnostic((prev: any) => ({ ...prev, account: p }));
         if (p.state === "accountLogin") {
@@ -1032,6 +1188,7 @@ function DesktopApp() {
           ...prev,
           [id]: prev[id] === p.turnId ? null : prev[id],
         }));
+        persistTranscript(id);
         ignore(refreshSessions());
         setCompleted((prev) => ({ ...prev, [id]: p.terminal }));
         const settings = preferencesRef.current;
@@ -1068,7 +1225,7 @@ function DesktopApp() {
         store.apply(event);
         if (id === activeRef.current) {
           if (buffering.current.has(id)) buffering.current.get(id)!.push(event);
-          else setItems(store.list());
+          else publishItems(id);
         }
       }
       if (
@@ -1137,6 +1294,7 @@ function DesktopApp() {
             result.diagnostic.account?.label,
           ]);
           setStorage(result.storage);
+          ignore(window.muse.storageStats().then(setStorage));
           if (result.storage?.warning) setError(result.storage.warning);
           setWorkspaces(result.workspaces || []);
           ignore(window.muse.commands().then(setCommands));
@@ -1181,6 +1339,9 @@ function DesktopApp() {
     window.addEventListener("focus", focus);
     return () => {
       alive = false;
+      if (itemFrame.current != null) cancelAnimationFrame(itemFrame.current);
+      itemFrame.current = null;
+      if (cacheTimer.current) clearTimeout(cacheTimer.current);
       offEvent();
       offExit();
       offError();
@@ -1256,12 +1417,60 @@ function DesktopApp() {
     return () => window.removeEventListener("keydown", key);
   }, []);
 
+  const sidebarWorkspaces = useMemo(
+    () => [...new Set([...workspaces, workspace])],
+    [workspaces, workspace],
+  );
+  const sidebarActions = useRef<any>({});
+  sidebarActions.current = {
+    onCollapse: () =>
+      setPreferences((prev) => ({
+        ...prev,
+        sidebarCollapsed: !prev.sidebarCollapsed,
+      })),
+    onArchived: setShowArchived,
+    onSearch: setSearch,
+    onUsage: () => void refreshUsage(),
+    onAccount: () => setModal("account"),
+    onSettings: () => settingsAt(),
+    onUpdates: () => settingsAt("updates"),
+    onTerminal: openTerminal,
+    onNew: (root: string) => setNewConversation({ initial: root }),
+    onSelect: (id: string) => void loadSession(id),
+    onProject: (root: string) => void switchWorkspace(root),
+    onActions: setConversationMenu,
+    onRefresh: () => void refreshSessions(),
+    onRetry: () => {
+      setHistoryError("");
+      setBootAttempt((v) => v + 1);
+    },
+    onHide: (root: string) => {
+      setHiddenHistory((prev) => ({
+        ...prev,
+        roots: [...new Set([...prev.roots, root])],
+      }));
+      void window.muse
+        .forgetWorkspace(root)
+        .then((result) => setWorkspaces(result.workspaces || []))
+        .catch((error) => setError(error.message));
+    },
+  };
+  const sidebarCallbacks = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.keys(sidebarActions.current).map((name) => [
+          name,
+          (...args: any[]) => sidebarActions.current[name](...args),
+        ]),
+      ),
+    [],
+  );
   return (
     <div
-      className="app-shell"
+      className={`app-shell ${preferences.sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}
       style={
         {
-          "--left-width": `${preferences.leftWidth}px`,
+          "--left-width": `${preferences.sidebarCollapsed ? 56 : preferences.leftWidth}px`,
           "--right-width": `${preferences.rightWidth}px`,
         } as React.CSSProperties
       }
@@ -1273,230 +1482,40 @@ function DesktopApp() {
         <span className="app-version">v{appVersion}</span>
         <span className="window-caption">A little space for big ideas.</span>
       </div>
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-icon">
-            <MuseMark />
-          </div>
-          <div>
-            <b>
-              muse<span>desktop</span>
-            </b>
-            <small>YOUR CREATIVE WORKSPACE</small>
-          </div>
-        </div>
-        <button
-          className="new-chat-button"
-          disabled={busy}
-          onClick={() => setNewConversation({ initial: workspace })}
-        >
-          <Plus size={17} /> New conversation <kbd>＋</kbd>
-        </button>
-        <div className="sidebar-heading">
-          <span>PROJECTS & CHATS</span>
-          {sessionsLoading ? (
-            <Loader2
-              size={12}
-              className="spin"
-              aria-label="Loading projects and conversations"
-            />
-          ) : null}
-          <button
-            className="icon-button"
-            title="Refresh conversations"
-            disabled={busy}
-            onClick={() => void run(refreshSessions)}
-          >
-            <RefreshCw size={13} />
-          </button>
-        </div>
-        <label className="search-field">
-          <Search size={14} />
-          <input
-            aria-label="Search conversations"
-            placeholder="Search conversations…"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-          />
-        </label>
-        <nav
-          className="session-list"
-          aria-label="Conversations"
-          aria-busy={sessionsLoading}
-        >
-          {sessionsLoading && !sessions.length ? (
-            <div className="list-skeleton" role="status">
-              Loading projects and conversations…
-              {[0, 1, 2, 3, 4].map((i) => (
-                <i key={i} />
-              ))}
-            </div>
-          ) : null}
-          {hiddenHistory.chats.length || hiddenHistory.roots.length ? (
-            <button
-              className="archive-toggle text-button"
-              onClick={() => setShowArchived((value) => !value)}
-            >
-              {showArchived
-                ? "Hide archived conversations"
-                : `Show archived (${hiddenHistory.chats.length}) and hidden projects`}
-            </button>
-          ) : null}
-          {historyError ? (
-            <div className="sidebar-empty" role="alert">
-              <p>{historyError}</p>
-              <button
-                className="secondary-button"
-                onClick={() => {
-                  setHistoryError("");
-                  setSessionsLoading(true);
-                  setBootAttempt((value) => value + 1);
-                }}
-              >
-                Retry connection
-              </button>
-            </div>
-          ) : null}
-          {groupedWorkspaces.map((root) => {
-            const rows = sessions.filter(
-              (row) =>
-                (row.workspaceRoot || "") === root &&
-                (showArchived ||
-                  !hiddenHistory.chats.includes(row.sessionId)) &&
-                sessionTitle(row).toLowerCase().includes(search.toLowerCase()),
-            );
-            if (search && !rows.length) return null;
-            return (
-              <section className="workspace-group" key={root || "ungrouped"}>
-                <div
-                  className={`workspace-heading ${root === workspace ? "selected" : ""}`}
-                >
-                  <button
-                    className="workspace-collapse"
-                    aria-label={`Toggle ${root ? basename(root) : "No folder"}`}
-                    aria-expanded={!collapsed[root]}
-                    onClick={() =>
-                      setCollapsed((prev) => ({ ...prev, [root]: !prev[root] }))
-                    }
-                  >
-                    <ChevronDown
-                      size={12}
-                      className={collapsed[root] ? "closed" : ""}
-                    />
-                  </button>
-                  <button
-                    className="workspace-name"
-                    title={root}
-                    disabled={busy || !root}
-                    onClick={() => void switchWorkspace(root)}
-                  >
-                    <Folder size={13} />
-                    <b>{root ? basename(root) : "No folder"}</b>
-                    <small>{rows.length}</small>
-                  </button>
-                  {root ? (
-                    <button
-                      className="icon-button"
-                      title={`Hide ${basename(root)} from projects; keep its files and chats`}
-                      onClick={() => {
-                        setHiddenHistory((previous) => ({
-                          ...previous,
-                          roots: [...new Set([...previous.roots, root])],
-                        }));
-                        void window.muse
-                          .forgetWorkspace(root)
-                          .then((result) =>
-                            setWorkspaces(result.workspaces || []),
-                          )
-                          .catch((error) => setError(error.message));
-                      }}
-                    >
-                      <X size={12} />
-                    </button>
-                  ) : null}
-                  <button
-                    className="icon-button"
-                    title={`New conversation in ${root ? basename(root) : "workspace"}`}
-                    disabled={busy}
-                    onClick={() => setNewConversation({ initial: root })}
-                  >
-                    <Plus size={12} />
-                  </button>
-                </div>
-                {!collapsed[root]
-                  ? rows.map((row) => (
-                      <div className="session-row-wrap" key={row.sessionId}>
-                        <button
-                          disabled={busy}
-                          className={`session-row ${row.sessionId === session ? "active" : ""} ${turns[row.sessionId] || row.status === "running" ? "running" : completed[row.sessionId] ? "done" : ""}`}
-                          onClick={() => void loadSession(row.sessionId)}
-                          title={sessionTitle(row)}
-                        >
-                          {turns[row.sessionId] || row.status === "running" ? (
-                            <Loader2 className="spin" size={12} />
-                          ) : completed[row.sessionId] ? (
-                            <Check size={12} />
-                          ) : (
-                            <MessageSquare size={12} />
-                          )}
-                          <span>
-                            <b>{sessionTitle(row)}</b>
-                            <small>
-                              {turns[row.sessionId]
-                                ? "Working…"
-                                : completed[row.sessionId] ||
-                                  timeAgo(row.lastActivityAt || row.updatedAt)}
-                            </small>
-                          </span>
-                          {row.attention ? (
-                            <span
-                              className="attention-dot"
-                              title="Needs attention"
-                            />
-                          ) : null}
-                        </button>
-                        <button
-                          className="icon-button session-more"
-                          aria-label="Conversation actions"
-                          title={`Actions for ${sessionTitle(row)}`}
-                          onClick={() => setConversationMenu(row)}
-                        >
-                          <MoreHorizontal size={14} />
-                        </button>
-                      </div>
-                    ))
-                  : null}
-              </section>
-            );
-          })}
-          {!sessionsLoading && !historyError && sessions.length === 0 ? (
-            <div className="sidebar-empty">
-              <MessageSquare size={20} />
-              <p>Your ideas start here.</p>
-              <small>
-                {workspace
-                  ? "Create your first conversation."
-                  : "Start with a project or no folder."}
-              </small>
-            </div>
-          ) : null}
-        </nav>
-        <div className="sidebar-bottom">
-          <button className="sidebar-link" onClick={openTerminal}>
-            <Terminal size={15} /> Muse CLI <ArrowUpRight size={13} />
-          </button>
-          <button className="sidebar-link" onClick={() => setModal("settings")}>
-            <Settings2 size={15} /> Settings <kbd>{modifier} ,</kbd>
-          </button>
-        </div>
-      </aside>
-      <ResizeHandle
-        label="Resize conversations sidebar"
-        value={preferences.leftWidth}
-        onChange={(leftWidth) =>
-          setPreferences((prev) => ({ ...prev, leftWidth }))
-        }
+      <WorkspaceSidebar
+        {...(sidebarCallbacks as any)}
+        sessions={sessions}
+        workspaces={sidebarWorkspaces}
+        workspace={workspace}
+        session={session}
+        collapsed={preferences.sidebarCollapsed}
+        busy={busy}
+        loading={sessionsLoading}
+        historyError={historyError}
+        turns={turns}
+        completed={completed}
+        hiddenHistory={hiddenHistory}
+        showArchived={showArchived}
+        search={search}
+        accountName={accountName}
+        signedIn={signedIn}
+        usage={usage}
+        usageLoading={usageLoading}
+        usageChecked={usageChecked}
+        usageError={usageError}
+        updateAvailable={!!updates?.available}
       />
+      {preferences.sidebarCollapsed ? (
+        <div className="resize-handle collapsed-handle" />
+      ) : (
+        <ResizeHandle
+          label="Resize conversations sidebar"
+          value={preferences.leftWidth}
+          onChange={(leftWidth) =>
+            setPreferences((prev) => ({ ...prev, leftWidth }))
+          }
+        />
+      )}
       <main className="main-panel">
         <header className="topbar">
           <div className="breadcrumb">
@@ -1687,6 +1706,11 @@ function DesktopApp() {
               onRefresh={() => void refreshSessions()}
             />
           ) : null}
+          {sessionRefreshing && !messagesLoading ? (
+            <div className="cache-sync" role="status">
+              <Loader2 size={11} className="spin" /> Updating from Muse…
+            </div>
+          ) : null}
           {messagesLoading ? (
             <div
               className="messages-loading"
@@ -1782,14 +1806,13 @@ function DesktopApp() {
                 autoCollapse={preferences.autoCollapse}
                 media={media[session] || EMPTY_MEDIA}
               />
-            ) : (
-              showItems.map((item) => (
-                <TranscriptItem
-                  key={item.itemId}
-                  item={{ ...item, sessionId: session, workspace }}
-                />
-              ))
-            )}
+            ) : tab === "activity" ? (
+              <ActivityPanel
+                items={tasks}
+                sessionId={session}
+                workspace={workspace}
+              />
+            ) : null}
             {tab === "activity" && tasks.length === 0 ? (
               <div className="activity-empty">
                 <Terminal size={24} />
@@ -2051,7 +2074,7 @@ function DesktopApp() {
                   compact
                   label="Model"
                   value={modelId}
-                  disabled={busy || readOnly}
+                  disabled={busy || readOnly || sessionRefreshing}
                   options={[
                     { value: "", label: "Muse default" },
                     ...models.map((model) => ({
@@ -2072,6 +2095,18 @@ function DesktopApp() {
                     else setModelId(selected);
                   }}
                 />
+                <button
+                  className={`thinking-button ${reasoning !== "none" ? "active" : ""}`}
+                  aria-pressed={reasoning !== "none"}
+                  title="Thinking mode uses native Muse reasoning on your next message"
+                  aria-label="Thinking mode"
+                  onClick={() =>
+                    setReasoning(reasoning === "none" ? "high" : "none")
+                  }
+                >
+                  <Sparkles size={13} />
+                  <span>Think</span>
+                </button>
                 <Select
                   compact
                   label="Reasoning effort"
@@ -2080,8 +2115,10 @@ function DesktopApp() {
                     value: effort,
                     label:
                       effort === "default"
-                        ? "CLI reasoning"
-                        : `${effort} effort`,
+                        ? "Auto"
+                        : effort === "none"
+                          ? "Off"
+                          : effort,
                   }))}
                   onChange={setReasoning}
                 />
@@ -2168,6 +2205,7 @@ function DesktopApp() {
                     uploading ||
                     readOnly ||
                     messagesLoading ||
+                    sessionRefreshing ||
                     !diagnostic?.connected ||
                     !signedIn ||
                     (!prompt.trim() && !images.length)
@@ -2270,112 +2308,6 @@ function DesktopApp() {
                 }
                 onOpenCli={() => nativeCommand("/mcp")}
               />
-            </div>
-            <div className="inspector-section account-usage">
-              <button
-                className="account-button"
-                onClick={() => setModal("account")}
-              >
-                <span
-                  className={`account-avatar ${signedIn ? "connected" : ""}`}
-                >
-                  {signedIn ? <Check size={17} /> : <LogIn size={17} />}
-                </span>
-                <span>
-                  <b>{accountName}</b>
-                  <small>
-                    {signedIn
-                      ? "Using your CLI sign-in"
-                      : "Muse Code subscription"}
-                  </small>
-                </span>
-                <ChevronDown size={13} />
-              </button>
-            </div>
-            <div className="inspector-section usage-section">
-              <h3>
-                <Zap size={14} /> Subscription usage{" "}
-                <button
-                  className="icon-button"
-                  title="Refresh subscription usage"
-                  disabled={usageLoading}
-                  onClick={() => void refreshUsage()}
-                >
-                  <RefreshCw size={11} className={usageLoading ? "spin" : ""} />
-                </button>
-              </h3>
-              {usage ? (
-                <>
-                  {[
-                    ["Current window", usage.window],
-                    ["Weekly", usage.weekly],
-                  ]
-                    .filter(
-                      ([, block]) =>
-                        block && Number.isFinite(block.usedPercent),
-                    )
-                    .map(([label, block]: any) => (
-                      <div className="usage-meter" key={label}>
-                        <div>
-                          <span>{label}</span>
-                          <b>{block.usedPercent}%</b>
-                        </div>
-                        <div className="meter-track">
-                          <i
-                            style={{
-                              width: `${Math.max(0, Math.min(100, block.usedPercent))}%`,
-                            }}
-                          />
-                        </div>
-                        <small>
-                          Resets{" "}
-                          {new Date(block.resetsAtMs).toLocaleString(
-                            undefined,
-                            {
-                              month: "short",
-                              day: "numeric",
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            },
-                          )}
-                        </small>
-                      </div>
-                    ))}
-                  <small className="usage-asof">
-                    Observed {new Date(usage.observedAtMs).toLocaleTimeString()}
-                  </small>
-                </>
-              ) : (
-                <div className="usage-unavailable">
-                  <span>
-                    {usageLoading
-                      ? "Refreshing usage…"
-                      : "No usage reported yet"}
-                  </span>
-                  <small>
-                    Muse reports limits after account activity. Refresh checks
-                    all connected conversation engines.
-                  </small>
-                </div>
-              )}
-              {usageError ? (
-                <small role="alert" className="usage-error">
-                  {usageError}
-                </small>
-              ) : null}
-              {usageChecked ? (
-                <small className="usage-asof">
-                  Checked {new Date(usageChecked).toLocaleTimeString()}
-                </small>
-              ) : null}
-              {!usage ? (
-                <button
-                  className="text-button"
-                  onClick={() => nativeCommand("/usage")}
-                >
-                  Open Muse usage
-                </button>
-              ) : null}
             </div>
             <div className="inspector-section">
               <h3>
@@ -2617,152 +2549,61 @@ function DesktopApp() {
             </>
           ) : null}
           {modal === "settings" ? (
-            <>
-              <span className="eyebrow">MAKE YOURSELF AT HOME</span>
-              <h2>Workspace settings</h2>
-              <div className="version-card">
-                <MuseMark />
-                <b>Muse Desktop</b>
-                <span className="beta-badge">BETA</span>
-                <code>v{appVersion}</code>
-              </div>
-              <p>
-                Connected to the same Muse Code installation as your terminal.
-              </p>
-              <fieldset className="appearance-settings">
-                <legend>Appearance</legend>
-                <p>
-                  Choose a palette. Your preference is saved on this computer.
-                </p>
-                <div className="theme-grid">
-                  {themes.map((option) => (
-                    <label className="theme-choice" key={option.id}>
-                      <input
-                        type="radio"
-                        name="theme"
-                        value={option.id}
-                        checked={themePreference === option.id}
-                        onChange={() => setThemePreference(option.id)}
-                      />
-                      <span
-                        className="theme-swatch"
-                        aria-hidden="true"
-                        style={{
-                          background: option.colors.bg,
-                          borderColor: option.colors.elevated,
-                        }}
-                      >
-                        <i style={{ background: option.colors.panel }} />
-                        <i style={{ background: option.colors.accent }} />
-                        <i style={{ background: option.colors.mint }} />
-                      </span>
-                      <span>
-                        <b>{option.name}</b>
-                        <small>{option.description}</small>
-                      </span>
-                      <Check
-                        className="theme-check"
-                        size={13}
-                        aria-hidden="true"
-                      />
-                    </label>
-                  ))}
-                </div>
-                <label className="system-theme-choice">
-                  <input
-                    type="radio"
-                    name="theme"
-                    value="system"
-                    checked={themePreference === "system"}
-                    onChange={() => setThemePreference("system")}
-                  />
-                  <span>
-                    <b>Follow system</b>
-                    <small>
-                      Use Muse Dark or Paper with your Windows appearance.
-                    </small>
-                  </span>
-                </label>
-              </fieldset>
-              <DesktopSettings value={preferences} onChange={setPreferences} />
-              <div className="setting-row">
-                <div>
-                  <b>Muse Code runtime</b>
-                  <small>{diagnostic?.version || "Not detected"}</small>
-                  <code>
-                    {diagnostic?.binary ||
-                      diagnostic?.error ||
-                      "Select the Muse executable below."}
-                  </code>
-                </div>
-                <button
-                  className="secondary-button"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const result = await window.muse.chooseBinary();
-                      if (result) setDiagnostic(result);
-                    })
+            <SettingsPanel
+              value={preferences}
+              onChange={setPreferences}
+              themePreference={themePreference}
+              onTheme={chooseTheme}
+              category={settingsCategory}
+              onCategory={setSettingsCategory}
+              diagnostic={diagnostic}
+              accountName={accountName}
+              workspace={workspace}
+              busy={busy || working}
+              onAccount={() => setModal("account")}
+              onProject={chooseWorkspace}
+              onLocate={() =>
+                void run(async () => {
+                  const result = await window.muse.chooseBinary();
+                  if (result) {
+                    setDiagnostic(result);
+                    setBootAttempt((v) => v + 1);
                   }
-                >
-                  Locate CLI
-                </button>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <b>Account</b>
-                  <small>{accountName}</small>
-                </div>
-                <button
-                  className="secondary-button"
-                  onClick={() => setModal("account")}
-                >
-                  Manage
-                </button>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <b>Project</b>
-                  <small>{workspace || "No folder selected"}</small>
-                </div>
-                <button
-                  className="secondary-button"
-                  disabled={working || busy}
-                  onClick={chooseWorkspace}
-                >
-                  Change
-                </button>
-              </div>
-              <div className="setting-row">
-                <div>
-                  <b>Terminal features</b>
-                  <small>
-                    Open the native CLI for its complete command palette.
-                  </small>
-                </div>
-                <button
-                  className="secondary-button"
-                  onClick={() => void run(() => window.muse.openCli())}
-                >
-                  <Terminal size={14} /> Open CLI
-                </button>
-              </div>
-              {diagnostic?.fingerprintWarning ? (
-                <p className="compatibility-note">
-                  Your CLI schema is newer than the SDK. Core methods are
-                  supported; protocol errors appear explicitly.
-                </p>
-              ) : null}
-              {logs.length ? (
-                <details className="runtime-logs">
-                  <summary>Runtime diagnostics</summary>
-                  <pre>{logs.join("\n")}</pre>
-                </details>
-              ) : null}
-              <button className="text-button" onClick={() => setModal("help")}>
-                Keyboard shortcuts and command guide <ArrowUpRight size={12} />
-              </button>
-            </>
+                })
+              }
+              onCli={() => void run(() => window.muse.openCli())}
+              logs={logs}
+              storage={storage}
+              onPurge={() =>
+                void run(async () => {
+                  const result = await window.muse.purgeAttachments(
+                    await drafts.retainedIds(),
+                  );
+                  setStorage(await window.muse.storageStats());
+                  if (!result.cancelled)
+                    setStatus(
+                      `${result.removed || 0} unused attachment copies deleted`,
+                    );
+                })
+              }
+              onClearCache={() =>
+                void run(async () => {
+                  await clearConversationCache();
+                  for (const id of stores.current.keys())
+                    if (id !== activeRef.current) {
+                      stores.current.delete(id);
+                      sessionSnapshots.current.delete(id);
+                      sessionExtras.current.delete(id);
+                    }
+                  setStatus(
+                    "Conversation previews cleared. Native history and drafts are kept.",
+                  );
+                })
+              }
+              updates={updates}
+              checkingUpdates={checkingUpdates}
+              onCheckUpdates={() => void checkUpdates(true)}
+            />
           ) : null}
           {modal === "help" ? (
             <>
@@ -2788,32 +2629,6 @@ function DesktopApp() {
                 ))}
               </div>
             </>
-          ) : null}
-          {modal === "settings" ? (
-            <section className="attachment-storage">
-              <h3>Local attachments</h3>
-              <p>
-                {storage
-                  ? `${storage.files} files · ${(storage.bytes / 1024 / 1024).toFixed(1)} MB`
-                  : "Files stay on this computer."}
-              </p>
-              <button
-                className="text-button"
-                disabled={busy || uploading}
-                onClick={() =>
-                  void run(async () => {
-                    const retained = await drafts.retainedIds();
-                    const result = await window.muse.purgeAttachments(retained);
-                    setStorage(await window.muse.storageStats());
-                    if (!result.cancelled)
-                      setStatus(`${result.removed} unused copies removed`);
-                  })
-                }
-              >
-                Clean unused attachment copies
-              </button>
-              <small>Sent files and saved drafts are kept.</small>
-            </section>
           ) : null}
           {modal === "rename" ? (
             <>

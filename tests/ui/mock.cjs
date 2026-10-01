@@ -45,6 +45,11 @@ window.testBridge = {
   },
 };
 window.muse = {
+  checkUpdates: async () => ({
+    currentVersion: "0.7.0-beta.1",
+    available: false,
+    checkedAt: Date.now(),
+  }),
   agentAppearance: async () => null,
   syncAppearance: async () => ({}),
   onAppearance: () => () => {},

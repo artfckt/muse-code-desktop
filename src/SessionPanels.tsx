@@ -328,6 +328,89 @@ export function SessionDetails({
     </section>
   );
 }
+export const ActivityPanel = memo(function ActivityPanel({
+  items,
+  sessionId,
+  workspace,
+}: {
+  items: MuseItem[];
+  sessionId: string;
+  workspace: string;
+}) {
+  const [filter, setFilter] = useState("all");
+  const [limit, setLimit] = useState(100);
+  useEffect(() => {
+    setFilter("all");
+    setLimit(100);
+  }, [sessionId]);
+  const selected = items.filter(
+    (item) =>
+      !item.retracted &&
+      (filter === "all" ||
+        (filter === "running"
+          ? item.status === "inProgress"
+          : item.status === "failed")),
+  );
+  return (
+    <section className="activity-panel">
+      <header className="activity-filterbar">
+        <span>{items.length} events</span>
+        <div>
+          {[
+            ["all", "All"],
+            ["running", "Running"],
+            ["failed", "Failed"],
+          ].map(([id, label]) => (
+            <button
+              key={id}
+              className={filter === id ? "selected" : ""}
+              aria-pressed={filter === id}
+              onClick={() => {
+                setFilter(id);
+                setLimit(100);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </header>
+      {selected.length > limit && (
+        <button
+          className="text-button load-earlier"
+          onClick={() => setLimit((v) => v + 100)}
+        >
+          Show earlier activity ({selected.length - limit} remaining)
+        </button>
+      )}
+      <div className="activity-feed">
+        {selected.slice(-limit).map((item, index) => (
+          <div
+            className={`activity-entry ${item.status === "failed" ? "failed" : ""}`}
+            key={item.itemId}
+          >
+            <span
+              className={`activity-node ${item.status === "inProgress" ? "running" : ""}`}
+              aria-hidden="true"
+            >
+              {String(
+                Math.max(0, selected.length - limit) + index + 1,
+              ).padStart(2, "0")}
+            </span>
+            <Message item={item} sessionId={sessionId} workspace={workspace} />
+          </div>
+        ))}
+      </div>
+      {!selected.length && (
+        <p className="activity-filter-empty">
+          {filter === "all"
+            ? "Tools, reasoning and shell events appear here as Muse works."
+            : `No ${filter} events.`}
+        </p>
+      )}
+    </section>
+  );
+});
 export function AgentsPanel({
   items,
   sessionId,
@@ -341,6 +424,11 @@ export function AgentsPanel({
 }) {
   const [message, setMessage] = useState<Record<string, string>>({});
   const [pending, setPending] = useState("");
+  const [managing, setManaging] = useState<string | null>(null);
+  useEffect(() => {
+    setManaging(null);
+    setMessage({});
+  }, [sessionId]);
   const agents = items.filter(
     (item) =>
       ["subagent", "reminderChild"].includes(item.kind) &&
@@ -365,119 +453,156 @@ export function AgentsPanel({
     }
   }
   return (
-    <section className="agents-panel">
-      <h3>
-        <Users size={16} /> Agents <span>{agents.length}</span>
-      </h3>
-      {!agents.length ? (
-        <p>
-          Ask Muse to delegate a task to agents. Native agents and their
-          individual conversations appear here as they start.
-        </p>
-      ) : null}
-      {agents.map((item) => (
-        <article className="agent-card" key={item.itemId}>
-          <header>
-            <b>{item.role || item.agentPath || "Agent"}</b>
-            <span className={item.status === "inProgress" ? "running" : ""}>
-              {item.controlStatus || item.status}
-            </span>
-            {item.childSessionId && item.status === "inProgress" ? (
-              <AgentLink
-                id={item.childSessionId}
-                parent={sessionId}
-                label={`Open ${item.role || "agent"} separately`}
-                onError={onError}
-              />
-            ) : null}
-          </header>
-          <p>{item.objective || itemText(item)}</p>
-          <dl className="agent-metadata">
-            {[
-              ["Agent", item.subagentId],
-              ["Session", item.childSessionId],
-              ["Path", item.agentPath],
-              ["Model", item.modelId || item.model?.modelId],
-              ["Provider", item.providerId || item.model?.providerId],
-              ["Started", item.startedAt || item.createdAt],
-              [
-                "Duration",
-                item.durationMs != null
-                  ? `${(item.durationMs / 1000).toFixed(1)}s`
-                  : null,
-              ],
-              ["State", item.controlStatus || item.status],
-            ]
-              .filter(([, value]) => value != null && value !== "")
-              .map(([name, value]) => (
-                <div key={name}>
-                  <dt>{name}</dt>
-                  <dd title={String(value)}>{String(value)}</dd>
+    <section className="agents-panel compact-agents">
+      <header className="agents-summary">
+        <div>
+          <Users size={16} />
+          <h3>Agent team</h3>
+          <span>{agents.length}</span>
+        </div>
+        <small>
+          {agents.filter((item) => item.status === "inProgress").length} running
+          · {agents.filter((item) => item.status === "completed").length}{" "}
+          completed
+        </small>
+      </header>
+      {!agents.length && (
+        <div className="agents-empty">
+          <Users size={24} />
+          <p>Delegate a task to Muse.</p>
+          <small>
+            Each native agent's objective, progress and controls appear here.
+          </small>
+        </div>
+      )}
+      <div className="agent-grid">
+        {agents.map((item) => (
+          <article className="agent-card" key={item.itemId}>
+            <header>
+              <span className="agent-avatar">
+                <Users size={15} />
+              </span>
+              <b>{item.role || item.agentPath || "Agent"}</b>
+              <span
+                className={`agent-status ${item.status === "inProgress" ? "running" : ""}`}
+              >
+                {item.controlStatus || item.status}
+              </span>
+              {item.childSessionId && item.status === "inProgress" && (
+                <AgentLink
+                  id={item.childSessionId}
+                  parent={sessionId}
+                  label={`Open ${item.role || "agent"} separately`}
+                  onError={onError}
+                />
+              )}
+            </header>
+            <p
+              className="agent-objective"
+              title={item.objective || itemText(item)}
+            >
+              {item.objective || itemText(item)}
+            </p>
+            <div className="agent-chips">
+              {(item.modelId || item.model?.modelId) && (
+                <span>{item.modelId || item.model?.modelId}</span>
+              )}
+              {item.durationMs != null && (
+                <span>{(item.durationMs / 1000).toFixed(1)}s</span>
+              )}
+            </div>
+            <div className="agent-card-footer">
+              <details className="agent-info">
+                <summary>Details</summary>
+                <dl className="agent-metadata">
+                  {[
+                    ["Agent", item.subagentId],
+                    ["Session", item.childSessionId],
+                    ["Path", item.agentPath],
+                    ["Model", item.modelId || item.model?.modelId],
+                    ["Provider", item.providerId || item.model?.providerId],
+                    ["Started", item.startedAt || item.createdAt],
+                    ["State", item.controlStatus || item.status],
+                  ]
+                    .filter(([, value]) => value != null && value !== "")
+                    .map(([name, value]) => (
+                      <div key={name}>
+                        <dt>{name}</dt>
+                        <dd title={String(value)}>{String(value)}</dd>
+                      </div>
+                    ))}
+                </dl>
+              </details>
+              {item.subagentId && (
+                <button
+                  className="text-button"
+                  aria-expanded={managing === item.itemId}
+                  aria-label={`Manage ${item.role || "agent"}`}
+                  onClick={() =>
+                    setManaging(managing === item.itemId ? null : item.itemId)
+                  }
+                >
+                  Controls <ChevronDown size={11} />
+                </button>
+              )}
+            </div>
+            {item.result && (
+              <details className="agent-result">
+                <summary>Agent result</summary>
+                <pre>
+                  {item.result.summary ||
+                    item.result.text ||
+                    JSON.stringify(item.result, null, 2)}
+                </pre>
+              </details>
+            )}
+            {item.subagentId && managing === item.itemId && (
+              <div className="agent-compose">
+                <textarea
+                  aria-label={`Message ${item.role || "agent"}`}
+                  placeholder="Message or follow-up task…"
+                  value={message[item.itemId] || ""}
+                  onChange={(e) =>
+                    setMessage((prev) => ({
+                      ...prev,
+                      [item.itemId]: e.target.value,
+                    }))
+                  }
+                />
+                <div className="agent-actions">
+                  <button
+                    disabled={!!pending || !message[item.itemId]?.trim()}
+                    onClick={() => void action(item, "sendMessage")}
+                  >
+                    Message
+                  </button>
+                  <button
+                    disabled={!!pending || !message[item.itemId]?.trim()}
+                    onClick={() => void action(item, "followupTask")}
+                  >
+                    Follow-up
+                  </button>
+                  {item.status === "inProgress" ? (
+                    <button
+                      disabled={!!pending}
+                      onClick={() => void action(item, "interrupt")}
+                    >
+                      Interrupt
+                    </button>
+                  ) : (
+                    <button
+                      disabled={!!pending}
+                      onClick={() => void action(item, "resume")}
+                    >
+                      <RefreshCw size={11} /> Resume
+                    </button>
+                  )}
                 </div>
-              ))}
-          </dl>
-          {item.durationMs != null ? (
-            <small>
-              {(item.durationMs / 1000).toFixed(1)}s ·{" "}
-              {item.agentPath || item.subagentId}
-            </small>
-          ) : null}
-          {item.result ? (
-            <details>
-              <summary>Agent result</summary>
-              <pre>
-                {item.result.summary ||
-                  item.result.text ||
-                  JSON.stringify(item.result, null, 2)}
-              </pre>
-            </details>
-          ) : null}
-          {item.subagentId ? (
-            <>
-              <textarea
-                aria-label={`Message ${item.role || "agent"}`}
-                placeholder="Send a message or follow-up task…"
-                value={message[item.itemId] || ""}
-                onChange={(e) =>
-                  setMessage((prev) => ({
-                    ...prev,
-                    [item.itemId]: e.target.value,
-                  }))
-                }
-              />
-              <div className="agent-actions">
-                <button
-                  disabled={!!pending || !message[item.itemId]?.trim()}
-                  onClick={() => void action(item, "sendMessage")}
-                >
-                  Message
-                </button>
-                <button
-                  disabled={!!pending || !message[item.itemId]?.trim()}
-                  onClick={() => void action(item, "followupTask")}
-                >
-                  Follow-up
-                </button>
-                {item.status === "inProgress" ? (
-                  <button
-                    disabled={!!pending}
-                    onClick={() => void action(item, "interrupt")}
-                  >
-                    Interrupt
-                  </button>
-                ) : (
-                  <button
-                    disabled={!!pending}
-                    onClick={() => void action(item, "resume")}
-                  >
-                    <RefreshCw size={11} /> Resume
-                  </button>
-                )}
               </div>
-            </>
-          ) : null}
-        </article>
-      ))}
+            )}
+          </article>
+        ))}
+      </div>
     </section>
   );
 }

@@ -13,6 +13,7 @@ const fs = require("node:fs");
 const { spawn } = require("node:child_process");
 const { subscriptionEnvironment } = require("./muse-host.cjs");
 const { NativeTerminal } = require("./native-terminal.cjs");
+const { UpdateChecker } = require("./update-checker.cjs");
 const { DesktopEngine } = require("./desktop-engine.cjs");
 const { DesktopServices, localPath } = require("./desktop-services.cjs");
 const {
@@ -45,6 +46,9 @@ protocol.registerSchemesAsPrivileged([
 const windows = new Set();
 const configuredSessions = new WeakSet();
 let services;
+let updates;
+let fontsRequest;
+let settingsMemo;
 const terminal = new NativeTerminal(emit);
 let window,
   muse,
@@ -62,20 +66,26 @@ function focusSession(id) {
 const settingsPath = () =>
   path.join(app.getPath("userData"), "desktop-settings.json");
 function settings() {
+  if (settingsMemo) return settingsMemo;
   try {
     try {
-      return JSON.parse(fs.readFileSync(settingsPath(), "utf8"));
+      return (settingsMemo = JSON.parse(
+        fs.readFileSync(settingsPath(), "utf8"),
+      ));
     } catch {
-      return JSON.parse(fs.readFileSync(`${settingsPath()}.bak`, "utf8"));
+      return (settingsMemo = JSON.parse(
+        fs.readFileSync(`${settingsPath()}.bak`, "utf8"),
+      ));
     }
   } catch {
-    return {};
+    return (settingsMemo = {});
   }
 }
 function saveSettings(value) {
   fs.mkdirSync(app.getPath("userData"), { recursive: true });
   const staged = `${settingsPath()}.tmp`;
-  fs.writeFileSync(staged, JSON.stringify({ ...settings(), ...value }));
+  settingsMemo = { ...settings(), ...value };
+  fs.writeFileSync(staged, JSON.stringify(settingsMemo));
   fs.copyFileSync(staged, `${settingsPath()}.bak.tmp`);
   fs.renameSync(`${settingsPath()}.bak.tmp`, `${settingsPath()}.bak`);
   fs.renameSync(staged, settingsPath());
@@ -301,6 +311,33 @@ app.whenReady().then(() => {
         target.webContents.send("muse:appearance", appearance);
     return { saved: true };
   });
+  updates = new UpdateChecker({
+    currentVersion: app.getVersion(),
+    read: () => settings().updateCache || {},
+    save: (updateCache) => saveSettings({ updateCache }),
+  });
+  handle("check-updates", async (options = {}) => {
+    const result = await updates.check(options.force === true);
+    if (
+      result.available &&
+      options.notify === true &&
+      settings().lastUpdateNotification !== result.version &&
+      Notification.isSupported()
+    ) {
+      const notification = new Notification({
+        title: "Muse Desktop update available",
+        body: `Version ${result.version} is available on GitHub.`,
+        silent: true,
+      });
+      notification.on(
+        "click",
+        () => void shell.openExternal(result.releaseUrl),
+      );
+      notification.show();
+      saveSettings({ lastUpdateNotification: result.version });
+    }
+    return result;
+  });
   handle("diagnose", () => muse.diagnose());
   ipcMain.handle("muse:window-theme", (event, colors) => {
     const senderWindow = trustedWindow(
@@ -329,7 +366,7 @@ app.whenReady().then(() => {
   });
   handle("bootstrap", async () => ({
     appVersion: app.getVersion(),
-    storage: services.storageStats(),
+    storage: null,
     channel: "beta",
     diagnostic: await muse.diagnose(),
     lastWorkspace: settings().workspace || null,
@@ -612,7 +649,7 @@ app.whenReady().then(() => {
   handle(
     "system-fonts",
     () =>
-      new Promise((resolve, reject) => {
+      (fontsRequest ||= new Promise((resolve, reject) => {
         const windows = process.platform === "win32";
         const child = spawn(
           windows ? "powershell.exe" : "fc-list",
@@ -659,7 +696,10 @@ app.whenReady().then(() => {
             reject(error);
           }
         });
-      }),
+      }).catch((error) => {
+        fontsRequest = null;
+        throw error;
+      })),
   );
   handle("agent-available", async (id) => {
     try {

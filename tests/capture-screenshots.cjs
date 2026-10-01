@@ -82,14 +82,14 @@ const fs = require("node:fs");
         itemId: "edit",
         kind: "toolCall",
         tool: "apply_patch",
-        text: "Updated compact navigation and activity cards.",
+        text: "Updated compact navigation and activity steps.",
         patchSummary: { added: 48, removed: 26 },
         durationMs: 642,
       },
       {
         itemId: "old-answer",
         kind: "agentMessage",
-        text: "## A calmer, more focused workspace\n\nThe desktop now gives your conversation more room, with the familiar Muse palette.\n\n- **Compact navigation** keeps projects and chats easy to scan.\n- **Activity cards** gather tool calls into a quiet, expandable summary.\n- **Clear loading states** make opening a long conversation feel predictable.\n\n```css\n.session-row {\n  min-height: 29px;\n  border-radius: 6px;\n}\n```\n\nThe session details stay pinned above the activity feed, so context stays close while you explore the work.",
+        text: "## A calmer, more focused workspace\n\nThe desktop now gives your conversation more room, with the familiar Muse palette.\n\n- **Compact navigation** keeps projects and chats easy to scan.\n- **Activity steps** gather tool calls into a quiet, expandable summary.\n- **Clear loading states** make opening a long conversation feel predictable.\n\n```css\n.session-row {\n  min-height: 25px;\n  border-radius: 6px;\n}\n```\n\nThe session details stay pinned above the activity feed, so context stays close while you explore the work.",
       },
     ];
     for (const item of items)
@@ -179,14 +179,29 @@ const fs = require("node:fs");
   await page.screenshot({ path: "docs/agents-preview.png" });
   await page.getByRole("button", { name: /^Settings/ }).click();
   await page.screenshot({ path: "docs/appearance-preview.png" });
+  await page.getByRole("combobox", { name: "Interface font" }).click();
+  await page.screenshot({ path: "docs/font-preview.png" });
+  await page.keyboard.press("Escape");
+  await page.getByRole("tab", { name: "Updates", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Check for updates", exact: true })
+    .click();
+  await page.screenshot({ path: "docs/updates-preview.png" });
   await page.getByRole("button", { name: "Close dialog" }).click();
+  await page
+    .getByRole("button", { name: "Collapse sidebar", exact: true })
+    .click();
+  await page.screenshot({ path: "docs/collapsed-sidebar-preview.png" });
+  await page
+    .getByRole("button", { name: "Expand sidebar", exact: true })
+    .click();
   await page.getByRole("button", { name: "New conversation ＋" }).click();
   await page.getByRole("radio").first().check();
   await page.screenshot({ path: "docs/new-conversation-preview.png" });
   await browser.close();
   if (errors.length) throw new Error(errors.join("\n"));
   console.log(
-    "Six current beta screenshots captured; sample content is illustrative.",
+    "Nine current beta screenshots captured; sample content is illustrative.",
   );
 })().catch((error) => {
   console.error(error);
