@@ -35,10 +35,14 @@ This beta makes chat navigation faster and gives conversations more space. It ad
 - All 36 protocol, native-host, terminal, update-checker and desktop boundary tests passed, including isolated Muse Code 1.4.2-R4684.1 echo-provider integration. No real account credentials or paid model calls were used.
 - All 57 UI tests passed, including six-theme accessibility checks, responsive controls, drag ordering, restart persistence, delayed native synchronization, font previews, theme reset, native thinking payloads and release-download routing.
 - The VPS Electron smoke test passed: real sandboxed preload, native PTY, media, IPC boundaries and isolated agent storage.
-- Synthetic production-renderer histories of 100 / 500 / 2,000 messages opened in 261 / 315 / 252 ms. Returning from another chat while the native read was deliberately held took 101 / 177 / 137 ms. The 2,000-item case rendered 200 entries, handled input in 18 ms and 30 stream deltas in 34 ms, without page errors. Browser automation overhead is included; these measurements are not machine-independent guarantees.
+- Synthetic production-renderer histories of 100 / 500 / 2,000 messages opened in 239 / 244 / 229 ms. Returning from another chat while the native read was deliberately held took 103 / 152 / 125 ms. The 2,000-item case rendered 200 entries, handled input in 28 ms and 30 stream deltas in 30 ms, without page errors. Browser automation overhead is included; these measurements are not machine-independent guarantees.
 - Nine screenshots show the real production interface with illustrative test data. The test bridge is excluded from the packaged application.
 
-Windows CI and installer inspection evidence is recorded below once packaging validation completes.
+- [Windows validation passed](https://github.com/artfckt/muse-code-desktop/actions/runs/36832964071): typecheck, 32 protocol/boundary/update tests, all 57 UI tests, installer build and packaged renderer, sandboxed preload, media and native PTY smoke checks. Four tests requiring the isolated Muse CLI are skipped on that runner; all 36 passed on the VPS with that CLI installed.
+- Native reasoning commands for both `none` and `high` were accepted by the isolated Muse CLI echo provider.
+- The VPS installer was extracted and inspected: Windows x64 application; 156 renderer/native source files matched the tested build byte for byte; all three Windows PTY prebuilds matched the pinned package; and the Linux PTY build was absent. These prebuilds also loaded in the independent Windows smoke check.
+- The final uploaded installer was downloaded again and compared byte for byte with the VPS file. SHA-256: `d0099bfdd6a6840a50cac8f5c0f429b4d5460e5c6a44c0a4e99e27310a2cd9ab`.
+- The full locked dependency audit reported zero known vulnerabilities at release validation.
 
 ## Beta limitations
 
