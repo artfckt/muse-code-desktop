@@ -91,7 +91,14 @@ class UpdateChecker {
   }
   check(force = false) {
     if (this.pending) return this.pending;
-    const cached = this.read();
+    const held = this.read();
+    const version = parseVersion(held.release?.version);
+    // A previously cached beta cannot move a stable installation to the beta channel.
+    const incompatible =
+      held.release &&
+      (!version ||
+        (!parseVersion(this.currentVersion)?.pre.length && version.pre.length));
+    const cached = incompatible ? {} : held;
     if (
       !force &&
       cached.checkedAt &&

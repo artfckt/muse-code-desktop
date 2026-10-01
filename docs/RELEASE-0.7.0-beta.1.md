@@ -32,7 +32,7 @@ This beta makes chat navigation faster and gives conversations more space. It ad
 ## Validation
 
 - Typecheck and production renderer build passed.
-- All 35 protocol, native-host, terminal, update-checker and desktop boundary tests passed, including isolated Muse Code 1.4.2-R4684.1 echo-provider integration. No real account credentials or paid model calls were used.
+- All 36 protocol, native-host, terminal, update-checker and desktop boundary tests passed, including isolated Muse Code 1.4.2-R4684.1 echo-provider integration. No real account credentials or paid model calls were used.
 - All 57 UI tests passed, including six-theme accessibility checks, responsive controls, drag ordering, restart persistence, delayed native synchronization, font previews, theme reset, native thinking payloads and release-download routing.
 - The VPS Electron smoke test passed: real sandboxed preload, native PTY, media, IPC boundaries and isolated agent storage.
 - Synthetic production-renderer histories of 100 / 500 / 2,000 messages opened in 261 / 315 / 252 ms. Returning from another chat while the native read was deliberately held took 101 / 177 / 137 ms. The 2,000-item case rendered 200 entries, handled input in 18 ms and 30 stream deltas in 34 ms, without page errors. Browser automation overhead is included; these measurements are not machine-independent guarantees.

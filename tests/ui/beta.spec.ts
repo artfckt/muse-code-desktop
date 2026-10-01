@@ -145,6 +145,14 @@ test("long histories offer jump to latest and keep details above scrolling activ
         },
       });
   });
+  await expect(page.locator(".assistant-message")).toHaveCount(50);
+  await expect
+    .poll(() =>
+      page
+        .locator(".chat-scroll")
+        .evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight),
+    )
+    .toBeLessThan(80);
   await page.locator(".chat-scroll").evaluate((el) => {
     el.scrollTop = 0;
     el.dispatchEvent(new Event("scroll"));

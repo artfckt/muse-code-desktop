@@ -41,6 +41,17 @@ const fs = require("node:fs");
       })),
     );
   });
+  await page.evaluate(() => {
+    const now = Date.now();
+    window.testBridge.emit({
+      method: "usage/changed",
+      params: {
+        observedAtMs: now,
+        window: { usedPercent: 32, resetsAtMs: now + 7200000 },
+        weekly: { usedPercent: 18, resetsAtMs: now + 4 * 86400000 },
+      },
+    });
+  });
   await page.locator(".session-row").first().waitFor();
   await page.screenshot({ path: "docs/desktop-preview.png" });
   await page.evaluate(() => {

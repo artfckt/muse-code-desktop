@@ -102,3 +102,34 @@ test("GitHub rate limits and malformed feeds are recoverable and never create an
   checker.fetch = async () => new Response("{");
   assert.equal((await checker.check(true)).available, false);
 });
+
+test("a stable install revalidates a cached beta and malformed cached versions recover", async () => {
+  for (const version of ["0.8.0-beta.1", "damaged-version"]) {
+    let saved = {
+      checkedAt: 1000,
+      etag: '"beta"',
+      release: { version, available: true },
+    };
+    let calls = 0;
+    const checker = new UpdateChecker({
+      currentVersion: "0.7.0",
+      now: () => 1001,
+      read: () => saved,
+      save: (value) => {
+        saved = value;
+      },
+      fetch: async (_url, options) => {
+        calls++;
+        assert.equal(options.headers["If-None-Match"], undefined);
+        return new Response(
+          JSON.stringify([release("v0.8.0-beta.1"), release("v0.7.1")]),
+        );
+      },
+    });
+    const result = await checker.check();
+    assert.equal(calls, 1);
+    assert.equal(result.version, "0.7.1");
+    assert.equal(result.available, true);
+    assert.equal(result.cached, false);
+  }
+});

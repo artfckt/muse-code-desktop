@@ -1990,6 +1990,7 @@ function DesktopApp() {
             ) : null}
             <textarea
               ref={textareaRef}
+              rows={1}
               aria-label="Message Muse"
               placeholder={
                 working
