@@ -1,17 +1,17 @@
 # Muse Desktop
 
-A focused desktop workspace for **Muse Code**. Chat with the same native engine you use in the CLI, keep projects and conversations together, and follow tools, approvals and agents without leaving the app.
+A focused desktop workspace for **Muse Code**. Chat with the same native engine you use in the CLI, keep projects and conversations together, and follow tools, approvals and running agents inside your conversation.
 
-**Current version: 0.7.0-beta.1 · Beta · Windows x64**
+**Current version: 0.8.0-beta.1 · Beta · Windows x64**
 
-[Download the beta installer](https://github.com/artfckt/muse-code-desktop/releases/tag/v0.7.0-beta.1) · [Muse Code documentation](https://dev.meta.ai/docs/muse-code) · [Windows build checks](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml)
+[Download the beta installer](https://github.com/artfckt/muse-code-desktop/releases/tag/v0.8.0-beta.1) · [Muse Code documentation](https://dev.meta.ai/docs/muse-code) · [Windows build checks](https://github.com/artfckt/muse-code-desktop/actions/workflows/windows-build.yml)
 
 ![Muse Desktop beta workspace](docs/conversation-preview.png)
 
 ## Get started
 
 1. Install [Muse Code](https://dev.meta.ai/docs/muse-code) and sign in with `muse login`.
-2. Download `Muse-Desktop-0.7.0-beta.1-Windows-x64.exe` from the beta release and run the installer.
+2. Download `Muse-Desktop-0.8.0-beta.1-Windows-x64.exe` from the beta release and run the installer.
 3. Open Muse Desktop. It reuses the CLI's existing account on this computer. If needed, choose **Sign in with Muse Code** inside the app.
 4. Select **New conversation**, choose a project folder or **No folder**, and start chatting.
 
@@ -21,18 +21,22 @@ Muse Desktop is an independent client, not an official Meta application. Authent
 
 ## A compact workspace
 
-- **Projects and chats:** distinct folder headers and 25 px chat rows, search, active indicators and clear loading states. Collapse the sidebar to a 56 px icon rail for more conversation space. Drag project headers or chats to reorder them; chat ordering stays within the native project. Keyboard users can reorder a focused header or chat with Alt + Up/Down. Conversation actions support rename, local archive/restore and Markdown export. Hide a project without deleting its files; search and the archived/hidden view keep its conversations discoverable.
-- **Conversations:** streaming Markdown, code highlighting, tables, formulas, diagrams, copyable response text and a **Jump to latest** button for long histories. Text selection stays in conversations and editable fields. Draft text and attachments are saved per conversation, with scroll position preserved while switching chats. Long histories initially render the latest 200 items; **Show earlier messages** reveals more without discarding native history.
-- **Activity:** a compact numbered event feed, running/failed filters and session details pinned above the scrolling feed. Inline chat steps stay quiet and expandable. Model, permissions, tokens and context appear when Muse reports them.
-- **Agents:** a separate card grid with objectives, native status, model and duration. Details reveal IDs, paths and results, while Manage reveals native controls. A separate-window link appears only for a running agent whose conversation is available. Native message, follow-up, interrupt and resume controls remain available where supported.
+- **Projects and chats:** distinct folder headers and 25 px chat rows, search, active indicators and clear loading states. Collapse the sidebar to a 56 px project rail with an expand button and a fixed account/settings footer for more conversation space. Drag project headers or chats to reorder them; chat ordering stays within the native project. Keyboard users can reorder a focused header or chat with Alt + Up/Down. Conversation actions support rename, local archive/restore and Markdown export. Hide a project without deleting its files; search and the archived/hidden view keep its conversations discoverable.
+- **Conversations:** streaming Markdown, code highlighting, tables, formulas, diagrams, copyable response text and a **Jump to latest** button for long histories. Text selection stays in conversations and editable fields. Draft text and attachments are saved per conversation, with scroll position preserved while switching chats. Long histories initially render the latest 200 messages, so a burst of tools cannot hide the conversation; **Show earlier messages** reveals more without discarding native history.
+- **Activity:** a compact numbered event feed, running/failed filters and session details pinned above the scrolling feed. Inline steps stay collapsed while Muse works. Each group shows its current action; summaries supplied by Muse appear as visible updates. Opening details renders 50 steps at a time, with earlier steps available on demand. Model, permissions, tokens and context appear when Muse reports them.
+- **Agents in chat:** a compact inline group shows running agents and their objectives alongside the messages. Expand it for native status, model, duration, results and controls. Reminder deliveries are treated as notifications and do not inflate agent counts. There is no separate Agents tab. A separate-window link appears only for a running agent whose conversation is available. Native message, follow-up, interrupt and resume controls remain available where supported.
 - **Native Muse CLI:** an integrated terminal for the original interactive experience, including commands that have no desktop API. It starts in the selected conversation’s actual folder, including isolated no-folder chats. The terminal runs a separate native conversation; inserting a CLI command does not mutate the GUI conversation. Restart explicitly when changing its context.
 - **Approvals:** native permission choices and structured questions, with isolated permission profiles for each root conversation.
 
 ![Pinned session details and activity](docs/activity-preview.png)
 
+The workspace inspector uses a compact project header, native permission controls, MCP configuration and a searchable skill list. Search covers every configured skill; **Browse all** opens the full list within the panel.
+
+![Agents alongside the conversation](docs/agents-preview.png)
+
 ## Faster chat navigation
 
-Recent conversations reuse their in-memory transcript and native host. A bounded local cache also restores the latest 200 items after restarting the app while Muse refreshes the authoritative history in the background. Sending waits for that refresh to finish. Disk previews retain up to 12 conversations, expire after seven days, and have a 16 MB total budget with a 2 MB per-conversation limit. Native history remains complete and available through **Show earlier messages** after synchronization.
+Recent conversations reuse their in-memory transcript and native host. A bounded local cache also restores up to 200 messages, 80 recent activity items and 20 agent records after restarting the app while Muse refreshes the authoritative history in the background. Sending waits for that refresh to finish. Disk previews retain up to 12 conversations, expire after seven days, and have a 16 MB total budget with a 2 MB per-conversation limit. Native history remains complete and available through **Show earlier messages** after synchronization.
 
 The sidebar index is cached separately, streaming changes are batched per animation frame, and typing does not rebuild the project list. Formula and diagram engines load when needed, reducing the initial JavaScript bundle. The chat and input share the same column width, and user messages use the same typography as replies.
 
@@ -69,9 +73,9 @@ Attach up to eight files per message. Total inline document excerpts are capped 
 
 **Muse Dark** and **Graphite** retain their original palettes. Four refreshed alternatives add **Porcelain**, **Aurora**, **Botanical** and **Orchid**, alongside automatic system appearance.
 
-Settings are organized into Appearance, Conversation, Layout, Notifications, Account & runtime, Storage & cache, and Updates. Installed fonts appear in a searchable dropdown with samples rendered in each font. On Windows, the list comes from the system font collection. Custom colors have visual pickers and editable HEX values. **Reset custom theme** restores the selected palette and default typography; choosing another theme also clears appearance overrides. Conversation and account preferences stay saved.
+Settings are organized into Appearance, Conversation, Layout, Notifications, Account & runtime, Storage & cache, and Updates. Choose **Interface & chat font** to open a searchable list. Select a name, inspect the single preview, then click **Apply font**; Cancel leaves the current font unchanged. **Use default font** restores DM Sans. Code keeps its monospace font. Installed fonts load only when the picker is opened and are cached for the app session. The list renders a small window of names, avoiding simultaneous loading of hundreds of font faces. On Windows, names come from the system font collection. Custom colors have visual pickers and editable HEX values. **Reset custom theme** restores the selected palette and default typography; choosing another theme also clears appearance overrides. Conversation and account preferences stay saved.
 
-![Appearance and typography settings](docs/appearance-preview.png)
+![Font search, preview and explicit Apply](docs/font-preview.png)
 
 ## Subscription usage
 
@@ -124,7 +128,7 @@ To regenerate the screenshots, run `npm run build:renderer`, start the productio
 
 ## This release
 
-See [0.7.0-beta.1 release notes](docs/RELEASE-0.7.0-beta.1.md) for changes and verification. Electron and the installer tooling have been updated; the full dependency audit reports zero known vulnerabilities at build time.
+See [0.8.0-beta.1 release notes](docs/RELEASE-0.8.0-beta.1.md) for changes and verification. This release focuses on conversation visibility, inline agents, faster font selection and compact workspace panels.
 
 ## Beta status
 

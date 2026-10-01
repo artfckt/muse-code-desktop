@@ -1,12 +1,10 @@
-import { useEffect, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { Select } from "./Select";
+import { FontPicker } from "./FontPicker";
 import {
-  fonts,
   resetAppearance,
   type DesktopPreferences,
 } from "./desktop-preferences";
-let fontRequest: Promise<string[]> | undefined;
 export function DesktopSettings({
   value,
   onChange,
@@ -16,38 +14,6 @@ export function DesktopSettings({
   onChange: (value: DesktopPreferences) => void;
   category?: string;
 }) {
-  const [installedFonts, setInstalledFonts] = useState<string[]>([]);
-  const [fontFilter, setFontFilter] = useState("");
-  const [fontStatus, setFontStatus] = useState("Loading installed fonts…");
-  useEffect(() => {
-    if (category !== "appearance") return;
-    let alive = true;
-    fontRequest ||= window.muse.systemFonts().catch((error) => {
-      fontRequest = undefined;
-      throw error;
-    });
-    void fontRequest
-      .then((list) => {
-        if (alive) {
-          setInstalledFonts(list);
-          setFontStatus(`${list.length} installed fonts`);
-        }
-      })
-      .catch(() => {
-        if (alive)
-          setFontStatus("Installed fonts unavailable on this computer");
-      });
-    return () => {
-      alive = false;
-    };
-  }, [category]);
-  const options = [...new Set([value.font, ...fonts, ...installedFonts])]
-    .filter(
-      (font) =>
-        font === value.font ||
-        font.toLowerCase().includes(fontFilter.toLowerCase()),
-    )
-    .slice(0, 120);
   const update = (patch: Partial<DesktopPreferences>) =>
     onChange({ ...value, ...patch });
   const toggles: [keyof DesktopPreferences, string][] =
@@ -61,7 +27,10 @@ export function DesktopSettings({
       : category === "layout"
         ? [
             ["compact", "Compact workspace and activity rows"],
-            ["autoCollapse", "Hide completed activity in the conversation"],
+            [
+              "autoCollapse",
+              "Keep activity steps collapsed in the conversation",
+            ],
             ["animations", "Animate running and completed chats"],
           ]
         : [];
@@ -79,36 +48,13 @@ export function DesktopSettings({
             </button>
           </div>
           <div className="settings-grid">
-            <label className="font-setting">
-              <span>Windows / system font</span>
-              <Select
-                label="Interface font"
+            <div className="font-setting">
+              <span>Interface & chat font</span>
+              <FontPicker
                 value={value.font}
-                options={options.map((font) => ({
-                  value: font,
-                  label: font,
-                  fontFamily: font,
-                }))}
                 onChange={(font) => update({ font })}
               />
-              <input
-                className="font-search"
-                aria-label="Search installed fonts"
-                placeholder="Filter installed fonts…"
-                value={fontFilter}
-                onChange={(e) => setFontFilter(e.target.value)}
-              />
-              <small className="settings-hint">
-                {fontStatus}
-                {options.length === 120 ? " · filter to see more" : ""}
-              </small>
-              <div
-                className="font-specimen"
-                style={{ fontFamily: `"${value.font}", sans-serif` }}
-              >
-                The quick brown fox · Aa Bb 012345
-              </div>
-            </label>
+            </div>
             {(
               [
                 ["chatSize", "Chat size", 11, 24, 1],

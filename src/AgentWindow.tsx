@@ -248,7 +248,6 @@ export function AgentWindow({ id, parent }: { id: string; parent: string }) {
             sessionId={id}
             workspace={session?.workspaceRoot || ""}
             media={media}
-            working={!!session?.activeTurnId}
             autoCollapse={appearancePreferences.autoCollapse}
           />
           {!items.length && !loading && !error ? (

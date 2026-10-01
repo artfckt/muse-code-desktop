@@ -224,7 +224,7 @@ test("the persistent chat preview restores after a renderer restart", async ({
     page.getByRole("status", { name: "Loading messages" }),
   ).toHaveCount(0);
 });
-test("activity uses a compact event feed and agents use separate cards with expandable controls", async ({
+test("activity uses an event feed and agents appear alongside the conversation", async ({
   page,
 }) => {
   await chat(page, "Chat Alpha").click();
@@ -256,10 +256,16 @@ test("activity uses a compact event feed and agents use separate cards with expa
   await page.getByRole("button", { name: /Activity 2/ }).click();
   await expect(page.locator(".activity-entry")).toHaveCount(2);
   await expect(page.locator(".assistant-message")).toHaveCount(0);
-  await page.getByRole("button", { name: /Agents 1/ }).click();
+  await page.getByRole("button", { name: "Conversation", exact: true }).click();
+  await page.getByRole("button", { name: /Show agents.*1 total/ }).click();
   await expect(page.locator(".agent-grid .agent-card")).toHaveCount(1);
   await expect(page.locator(".activity-entry")).toHaveCount(0);
-  await expect(page.locator(".assistant-message")).toHaveCount(0);
+  await expect(
+    page
+      .locator(".assistant-message")
+      .filter({ hasText: "Conversation content" }),
+  ).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Agents / })).toHaveCount(0);
   await expect(
     page.getByRole("textbox", { name: "Message Reviewer" }),
   ).toHaveCount(0);
@@ -361,7 +367,7 @@ test("settings categories expose update checks and official downloads", async ({
     ),
   ).toMatch(/github.com\/artfckt\/muse-code-desktop\/releases/);
 });
-test("font dropdown previews each font and theme changes reset only appearance overrides", async ({
+test("font dropdown previews a candidate before applying it and theme changes reset only appearance overrides", async ({
   page,
 }) => {
   await page.getByRole("button", { name: /^Settings/ }).click();
@@ -370,10 +376,15 @@ test("font dropdown previews each font and theme changes reset only appearance o
     .fill("#4488ff");
   await page.getByRole("combobox", { name: "Interface font" }).click();
   const font = page.getByRole("option", { name: "Cascadia Code", exact: true });
-  expect(
-    await font.evaluate((el) => getComputedStyle(el).fontFamily),
-  ).toContain("Cascadia Code");
   await font.click();
+  await expect(page.locator(".font-live-preview > p")).toHaveCSS(
+    "font-family",
+    /Cascadia Code/,
+  );
+  await expect(
+    page.getByRole("combobox", { name: "Interface font" }),
+  ).toContainText("DM Sans");
+  await page.getByRole("button", { name: "Apply font", exact: true }).click();
   await page.getByRole("button", { name: "Reset custom theme" }).click();
   await expect(
     page.getByRole("textbox", { name: "accent color", exact: true }),

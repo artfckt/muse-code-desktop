@@ -46,7 +46,7 @@ window.testBridge = {
 };
 window.muse = {
   checkUpdates: async () => ({
-    currentVersion: "0.7.0-beta.1",
+    currentVersion: "0.8.0-beta.1",
     available: false,
     checkedAt: Date.now(),
   }),

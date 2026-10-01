@@ -6,17 +6,17 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  ExternalLink,
-  Users,
-  RefreshCw,
-  ChevronDown,
-  Check,
-  Loader2,
-} from "lucide-react";
+import { Users, RefreshCw, ChevronDown, Check, Loader2 } from "lucide-react";
 import { AgentLink } from "./AgentLink";
 import { TranscriptItem } from "./components";
 import { itemText, type MuseItem } from "./protocol";
+import {
+  conversationWindow,
+  nativeAgents,
+  agentWorking,
+  activityLabel,
+  nativeCommentary,
+} from "./conversation";
 
 export function ResizeHandle({
   label,
@@ -99,14 +99,12 @@ export const ConversationTimeline = memo(function ConversationTimeline({
   items,
   sessionId,
   workspace,
-  working,
   autoCollapse,
   media,
 }: {
   items: MuseItem[];
   sessionId: string;
   workspace: string;
-  working: boolean;
   autoCollapse: boolean;
   media: Record<string, any[]>;
 }) {
@@ -121,7 +119,7 @@ export const ConversationTimeline = memo(function ConversationTimeline({
       previousHeight.current = null;
     }
   }, [limit]);
-  const visible = items.length > limit ? items.slice(-limit) : items;
+  const { visible, remaining } = conversationWindow(items, limit);
   const groups: { message?: MuseItem; activity?: MuseItem[]; key: string }[] =
     [];
   for (const item of visible.filter((i) => !i.retracted)) {
@@ -133,7 +131,7 @@ export const ConversationTimeline = memo(function ConversationTimeline({
   return (
     <>
       <div ref={anchor} />
-      {items.length > limit ? (
+      {remaining > 0 ? (
         <button
           className="text-button load-earlier"
           onClick={() => {
@@ -142,10 +140,10 @@ export const ConversationTimeline = memo(function ConversationTimeline({
             setLimit((current) => current + 200);
           }}
         >
-          Show earlier messages ({items.length - limit} remaining)
+          Show earlier messages ({remaining} remaining)
         </button>
       ) : null}
-      {groups.map((group, index) =>
+      {groups.map((group) =>
         group.message ? (
           <Message
             key={group.key}
@@ -160,13 +158,7 @@ export const ConversationTimeline = memo(function ConversationTimeline({
             items={group.activity!}
             sessionId={sessionId}
             workspace={workspace}
-            expanded={
-              !autoCollapse ||
-              (working &&
-                !groups
-                  .slice(index + 1)
-                  .some((g) => g.message?.kind === "userMessage"))
-            }
+            expanded={!autoCollapse}
           />
         ),
       )}
@@ -186,7 +178,12 @@ function ActivityGroup({
 }) {
   const [open, setOpen] = useState(expanded);
   useEffect(() => setOpen(expanded), [expanded]);
+  const [limit, setLimit] = useState(50);
   const running = items.some((i) => i.status === "inProgress");
+  const current =
+    [...items].reverse().find((item) => item.status === "inProgress") ||
+    items.at(-1)!;
+  const commentary = nativeCommentary(items);
   return (
     <section className="activity-group">
       <button
@@ -198,31 +195,27 @@ function ActivityGroup({
         <span>
           {items.length} activity {items.length === 1 ? "step" : "steps"}
         </span>
-        <span className="activity-preview">
-          {[
-            ...new Set(
-              items.map(
-                (item) =>
-                  item.tool ||
-                  (item.kind === "userShell"
-                    ? "Shell"
-                    : item.kind === "reasoning"
-                      ? "Reasoning"
-                      : item.kind === "subagent"
-                        ? item.role || "Agent"
-                        : item.kind),
-              ),
-            ),
-          ]
-            .slice(0, 3)
-            .join(" · ")}
-        </span>
+        <span className="activity-preview">{activityLabel(current)}</span>
         <small>{running ? "Running" : open ? "Collapse" : "Details"}</small>
         <ChevronDown size={13} className={open ? "rotate" : ""} />
       </button>
+      {commentary && (
+        <div className="muse-commentary">
+          <small>Muse update</small>
+          <p>{commentary}</p>
+        </div>
+      )}
       {open ? (
-        <div>
-          {items.map((item) => (
+        <div className="activity-step-list">
+          {items.length > limit && (
+            <button
+              className="text-button load-earlier"
+              onClick={() => setLimit((v) => v + 50)}
+            >
+              Show earlier steps ({items.length - limit} remaining)
+            </button>
+          )}
+          {items.slice(-limit).map((item) => (
             <TranscriptItem
               key={item.itemId}
               item={{ ...item, sessionId, workspace }}
@@ -411,7 +404,7 @@ export const ActivityPanel = memo(function ActivityPanel({
     </section>
   );
 });
-export function AgentsPanel({
+export function InlineAgents({
   items,
   sessionId,
   onError,
@@ -429,11 +422,14 @@ export function AgentsPanel({
     setManaging(null);
     setMessage({});
   }, [sessionId]);
-  const agents = items.filter(
-    (item) =>
-      ["subagent", "reminderChild"].includes(item.kind) &&
-      (item.childSessionId || item.subagentId),
-  );
+  const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    setExpanded(false);
+    setShowAll(false);
+  }, [sessionId]);
+  const agents = useMemo(() => nativeAgents(items), [items]);
+  const running = agents.filter(agentWorking);
   async function action(item: MuseItem, name: string) {
     setPending(item.itemId);
     try {
@@ -452,196 +448,175 @@ export function AgentsPanel({
       setPending("");
     }
   }
+  if (!agents.length) return null;
   return (
-    <section className="agents-panel compact-agents">
-      <header className="agents-summary">
-        <div>
-          <Users size={16} />
-          <h3>Agent team</h3>
-          <span>{agents.length}</span>
-        </div>
-        <small>
-          {agents.filter((item) => item.status === "inProgress").length} running
-          · {agents.filter((item) => item.status === "completed").length}{" "}
-          completed
-        </small>
-      </header>
-      {!agents.length && (
-        <div className="agents-empty">
-          <Users size={24} />
-          <p>Delegate a task to Muse.</p>
-          <small>
-            Each native agent's objective, progress and controls appear here.
-          </small>
-        </div>
-      )}
-      <div className="agent-grid">
-        {agents.map((item) => (
-          <article className="agent-card" key={item.itemId}>
-            <header>
-              <span className="agent-avatar">
-                <Users size={15} />
-              </span>
-              <b>{item.role || item.agentPath || "Agent"}</b>
-              <span
-                className={`agent-status ${item.status === "inProgress" ? "running" : ""}`}
-              >
-                {item.controlStatus || item.status}
-              </span>
-              {item.childSessionId && item.status === "inProgress" && (
-                <AgentLink
-                  id={item.childSessionId}
-                  parent={sessionId}
-                  label={`Open ${item.role || "agent"} separately`}
-                  onError={onError}
-                />
-              )}
-            </header>
-            <p
-              className="agent-objective"
-              title={item.objective || itemText(item)}
-            >
-              {item.objective || itemText(item)}
-            </p>
-            <div className="agent-chips">
-              {(item.modelId || item.model?.modelId) && (
-                <span>{item.modelId || item.model?.modelId}</span>
-              )}
-              {item.durationMs != null && (
-                <span>{(item.durationMs / 1000).toFixed(1)}s</span>
-              )}
-            </div>
-            <div className="agent-card-footer">
-              <details className="agent-info">
-                <summary>Details</summary>
-                <dl className="agent-metadata">
-                  {[
-                    ["Agent", item.subagentId],
-                    ["Session", item.childSessionId],
-                    ["Path", item.agentPath],
-                    ["Model", item.modelId || item.model?.modelId],
-                    ["Provider", item.providerId || item.model?.providerId],
-                    ["Started", item.startedAt || item.createdAt],
-                    ["State", item.controlStatus || item.status],
-                  ]
-                    .filter(([, value]) => value != null && value !== "")
-                    .map(([name, value]) => (
-                      <div key={name}>
-                        <dt>{name}</dt>
-                        <dd title={String(value)}>{String(value)}</dd>
-                      </div>
-                    ))}
-                </dl>
-              </details>
-              {item.subagentId && (
-                <button
-                  className="text-button"
-                  aria-expanded={managing === item.itemId}
-                  aria-label={`Manage ${item.role || "agent"}`}
-                  onClick={() =>
-                    setManaging(managing === item.itemId ? null : item.itemId)
-                  }
-                >
-                  Controls <ChevronDown size={11} />
-                </button>
-              )}
-            </div>
-            {item.result && (
-              <details className="agent-result">
-                <summary>Agent result</summary>
-                <pre>
-                  {item.result.summary ||
-                    item.result.text ||
-                    JSON.stringify(item.result, null, 2)}
-                </pre>
-              </details>
-            )}
-            {item.subagentId && managing === item.itemId && (
-              <div className="agent-compose">
-                <textarea
-                  aria-label={`Message ${item.role || "agent"}`}
-                  placeholder="Message or follow-up task…"
-                  value={message[item.itemId] || ""}
-                  onChange={(e) =>
-                    setMessage((prev) => ({
-                      ...prev,
-                      [item.itemId]: e.target.value,
-                    }))
-                  }
-                />
-                <div className="agent-actions">
-                  <button
-                    disabled={!!pending || !message[item.itemId]?.trim()}
-                    onClick={() => void action(item, "sendMessage")}
-                  >
-                    Message
-                  </button>
-                  <button
-                    disabled={!!pending || !message[item.itemId]?.trim()}
-                    onClick={() => void action(item, "followupTask")}
-                  >
-                    Follow-up
-                  </button>
-                  {item.status === "inProgress" ? (
-                    <button
-                      disabled={!!pending}
-                      onClick={() => void action(item, "interrupt")}
-                    >
-                      Interrupt
-                    </button>
-                  ) : (
-                    <button
-                      disabled={!!pending}
-                      onClick={() => void action(item, "resume")}
-                    >
-                      <RefreshCw size={11} /> Resume
-                    </button>
-                  )}
-                </div>
-              </div>
-            )}
-          </article>
-        ))}
-      </div>
-    </section>
-  );
-}
-export function McpPanel({
-  inventory,
-  onRefresh,
-  onOpenCli,
-}: {
-  inventory: any;
-  onRefresh: () => void;
-  onOpenCli: () => void;
-}) {
-  return (
-    <section className="mcp-panel">
-      <h3>
-        MCP servers{" "}
-        <button
-          className="icon-button"
-          title="Refresh MCP configuration"
-          onClick={onRefresh}
-        >
-          <RefreshCw size={12} />
-        </button>
-      </h3>
-      {inventory?.servers?.length ? (
-        inventory.servers.map((server: any) => (
-          <div className="mcp-server" key={server.name}>
-            <b>{server.name}</b>
-            <small>
-              {server.transport} · {server.status}
-            </small>
-          </div>
-        ))
-      ) : (
-        <p>No MCP servers in Muse settings.</p>
-      )}
-      <button className="text-button" onClick={onOpenCli}>
-        Open native /mcp manager
+    <section className="agents-panel inline-agents">
+      <button
+        className="inline-agent-toggle"
+        aria-label={`Show agents (${running.length} working, ${agents.length} total)`}
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        {running.length ? (
+          <Loader2 size={13} className="spin" />
+        ) : (
+          <Users size={13} />
+        )}
+        <b>Agents</b>
+        <span>
+          {running.length
+            ? `${running.length} working`
+            : `${agents.length} ${agents.length === 1 ? "agent" : "agents"}`}
+        </span>
+        <ChevronDown size={13} className={expanded ? "rotate" : ""} />
       </button>
+      {!expanded &&
+        running.slice(0, 3).map((item) => (
+          <p className="inline-agent-progress" key={item.itemId}>
+            <b>{item.role || "Agent"}</b>
+            <span>
+              {item.objective ||
+                item.fallbackText ||
+                item.controlStatus ||
+                item.status}
+            </span>
+          </p>
+        ))}
+      {expanded && (
+        <div className="agent-grid">
+          {(showAll ? agents : agents.slice(0, 6)).map((item) => (
+            <article className="agent-card" key={item.itemId}>
+              <header>
+                <span className="agent-avatar">
+                  <Users size={15} />
+                </span>
+                <b>{item.role || item.agentPath || "Agent"}</b>
+                <span
+                  className={`agent-status ${agentWorking(item) ? "running" : ""}`}
+                >
+                  {item.controlStatus || item.status}
+                </span>
+                {item.childSessionId && agentWorking(item) && (
+                  <AgentLink
+                    id={item.childSessionId}
+                    parent={sessionId}
+                    label={`Open ${item.role || "agent"} separately`}
+                    onError={onError}
+                  />
+                )}
+              </header>
+              <p
+                className="agent-objective"
+                title={item.objective || itemText(item)}
+              >
+                {item.objective || itemText(item)}
+              </p>
+              <div className="agent-chips">
+                {(item.modelId || item.model?.modelId) && (
+                  <span>{item.modelId || item.model?.modelId}</span>
+                )}
+                {item.durationMs != null && (
+                  <span>{(item.durationMs / 1000).toFixed(1)}s</span>
+                )}
+              </div>
+              <div className="agent-card-footer">
+                <details className="agent-info">
+                  <summary>Details</summary>
+                  <dl className="agent-metadata">
+                    {[
+                      ["Agent", item.subagentId],
+                      ["Session", item.childSessionId],
+                      ["Path", item.agentPath],
+                      ["Model", item.modelId || item.model?.modelId],
+                      ["Provider", item.providerId || item.model?.providerId],
+                      ["Started", item.startedAt || item.createdAt],
+                      ["State", item.controlStatus || item.status],
+                    ]
+                      .filter(([, value]) => value != null && value !== "")
+                      .map(([name, value]) => (
+                        <div key={name}>
+                          <dt>{name}</dt>
+                          <dd title={String(value)}>{String(value)}</dd>
+                        </div>
+                      ))}
+                  </dl>
+                </details>
+                {item.subagentId && (
+                  <button
+                    className="text-button"
+                    aria-expanded={managing === item.itemId}
+                    aria-label={`Manage ${item.role || "agent"}`}
+                    onClick={() =>
+                      setManaging(managing === item.itemId ? null : item.itemId)
+                    }
+                  >
+                    Controls <ChevronDown size={11} />
+                  </button>
+                )}
+              </div>
+              {item.result && (
+                <details className="agent-result">
+                  <summary>Agent result</summary>
+                  <pre>
+                    {item.result.summary ||
+                      item.result.text ||
+                      JSON.stringify(item.result, null, 2)}
+                  </pre>
+                </details>
+              )}
+              {item.subagentId && managing === item.itemId && (
+                <div className="agent-compose">
+                  <textarea
+                    aria-label={`Message ${item.role || "agent"}`}
+                    placeholder="Message or follow-up task…"
+                    value={message[item.itemId] || ""}
+                    onChange={(e) =>
+                      setMessage((prev) => ({
+                        ...prev,
+                        [item.itemId]: e.target.value,
+                      }))
+                    }
+                  />
+                  <div className="agent-actions">
+                    <button
+                      disabled={!!pending || !message[item.itemId]?.trim()}
+                      onClick={() => void action(item, "sendMessage")}
+                    >
+                      Message
+                    </button>
+                    <button
+                      disabled={!!pending || !message[item.itemId]?.trim()}
+                      onClick={() => void action(item, "followupTask")}
+                    >
+                      Follow-up
+                    </button>
+                    {agentWorking(item) ? (
+                      <button
+                        disabled={!!pending}
+                        onClick={() => void action(item, "interrupt")}
+                      >
+                        Interrupt
+                      </button>
+                    ) : (
+                      <button
+                        disabled={!!pending}
+                        onClick={() => void action(item, "resume")}
+                      >
+                        <RefreshCw size={11} /> Resume
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </article>
+          ))}
+          {!showAll && agents.length > 6 && (
+            <button className="text-button" onClick={() => setShowAll(true)}>
+              Show all {agents.length} agents
+            </button>
+          )}
+        </div>
+      )}
     </section>
   );
 }

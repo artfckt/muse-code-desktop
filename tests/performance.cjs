@@ -173,6 +173,88 @@ const assert = require("node:assert/strict");
       );
       await context.close();
     }
+    const context = await browser.newContext({
+      viewport: { width: 1440, height: 940 },
+    });
+    await context.addInitScript({ path: path.resolve("tests/ui/mock.cjs") });
+    const page = await context.newPage();
+    const errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.goto(process.env.MUSE_PREVIEW_URL || "http://127.0.0.1:5176");
+    await page.getByText("Using your CLI sign-in").waitFor();
+    await page.evaluate(() => {
+      window.muse.resumeSession = async () => ({
+        session: { sessionId: "tools", workspaceRoot: "/projects/studio" },
+        history: {
+          items: [
+            {
+              itemId: "request",
+              kind: "userMessage",
+              text: "Review the application",
+              status: "completed",
+              revision: 1,
+            },
+            {
+              itemId: "comment",
+              kind: "agentMessage",
+              text: "Checking the interface and keyboard navigation.",
+              status: "completed",
+              revision: 1,
+            },
+            ...Array.from({ length: 500 }, (_, i) => ({
+              itemId: `tool-${i}`,
+              kind: "toolCall",
+              tool: "read_file",
+              args: '{"path":"src/App.tsx"}',
+              status: i === 499 ? "inProgress" : "completed",
+              revision: 1,
+            })),
+          ],
+        },
+      });
+      window.testBridge.setSessions([
+        {
+          sessionId: "tools",
+          name: "Tool flood fixture",
+          workspaceRoot: "/projects/studio",
+        },
+      ]);
+    });
+    const start = Date.now();
+    await page.locator(".session-row").click();
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll(".assistant-message,.user-message").length ===
+        2,
+    );
+    const openMs = Date.now() - start;
+    assert.equal(await page.locator(".tool-card").count(), 0);
+    assert.equal(
+      await page
+        .getByRole("button", { name: /500 activity steps/ })
+        .getAttribute("aria-expanded"),
+      "false",
+    );
+    const detailsStart = Date.now();
+    await page.getByRole("button", { name: /500 activity steps/ }).click();
+    await page.waitForFunction(
+      () => document.querySelectorAll(".tool-card").length === 50,
+    );
+    const expandMs = Date.now() - detailsStart;
+    assert.deepEqual(errors, []);
+    console.log(
+      JSON.stringify({
+        activities: 500,
+        renderedMessages: 2,
+        openMs,
+        expandMs,
+        initialToolRows: 0,
+        expandedToolRows: 50,
+        domNodes: await page.locator("*").count(),
+        pageErrors: errors,
+      }),
+    );
+    await context.close();
   } finally {
     await browser.close();
   }

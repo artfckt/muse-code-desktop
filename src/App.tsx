@@ -54,6 +54,7 @@ import { SettingsPanel } from "./SettingsPanel";
 import { useDrafts } from "./useDrafts";
 import { Modal } from "./Modal";
 import { Select } from "./Select";
+import { WorkspaceInspector } from "./WorkspaceInspector";
 import { NewConversation } from "./NewConversation";
 import { version as appVersion } from "../package.json";
 import { DesktopSettings } from "./DesktopSettings";
@@ -69,9 +70,8 @@ import {
   ResizeHandle,
   ConversationTimeline,
   SessionDetails,
-  AgentsPanel,
+  InlineAgents,
   ActivityPanel,
-  McpPanel,
 } from "./SessionPanels";
 import {
   ApprovalCard,
@@ -295,9 +295,9 @@ function DesktopApp() {
   const [login, setLogin] = useState<any>(null);
   const [loginBusy, setLoginBusy] = useState(false);
   const [inspector, setInspector] = useState(() => innerWidth > 950);
-  const [tab, setTab] = useState<
-    "conversation" | "activity" | "terminal" | "agents"
-  >("conversation");
+  const [tab, setTab] = useState<"conversation" | "activity" | "terminal">(
+    "conversation",
+  );
   const [terminalOpened, setTerminalOpened] = useState(false);
   function openTerminal() {
     setTerminalOpened(true);
@@ -928,7 +928,7 @@ function DesktopApp() {
           return;
         }
         if (["subagents", "tasks", "workflows"].includes(name)) {
-          setTab(name === "subagents" ? "agents" : "activity");
+          setTab(name === "subagents" ? "conversation" : "activity");
           drafts.clear(sent);
           return;
         }
@@ -1465,6 +1465,28 @@ function DesktopApp() {
       ),
     [],
   );
+  const inspectorActions = useRef<any>({});
+  inspectorActions.current = {
+    onHide: () => setInspector(false),
+    onPermissions: (value: string) =>
+      void changePermissions(permissionProfile, value),
+    onRefresh: () => run(async () => setMcp(await window.muse.mcpInventory())),
+    onOpenCli: () => nativeCommand("/mcp"),
+    onSkill: (selector: string) => {
+      setPrompt(`/${selector} `);
+      textareaRef.current?.focus();
+    },
+  };
+  const inspectorCallbacks = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.keys(inspectorActions.current).map((name) => [
+          name,
+          (...args: any[]) => inspectorActions.current[name](...args),
+        ]),
+      ),
+    [],
+  );
   return (
     <div
       className={`app-shell ${preferences.sidebarCollapsed ? "sidebar-is-collapsed" : ""}`}
@@ -1568,19 +1590,6 @@ function DesktopApp() {
             onClick={openTerminal}
           >
             <Command size={14} /> Muse CLI <span>Native</span>
-          </button>
-          <button
-            className={tab === "agents" ? "active" : ""}
-            onClick={() => setTab("agents")}
-          >
-            <Users size={14} /> Agents{" "}
-            <span>
-              {
-                items.filter((item) =>
-                  ["subagent", "reminderChild"].includes(item.kind),
-                ).length
-              }
-            </span>
           </button>
           {session ? (
             <button
@@ -1698,14 +1707,6 @@ function DesktopApp() {
               </button>
             </section>
           ) : null}
-          {tab === "agents" ? (
-            <AgentsPanel
-              items={items}
-              sessionId={session}
-              onError={setError}
-              onRefresh={() => void refreshSessions()}
-            />
-          ) : null}
           {sessionRefreshing && !messagesLoading ? (
             <div className="cache-sync" role="status">
               <Loader2 size={11} className="spin" /> Updating from Muse…
@@ -1767,10 +1768,7 @@ function DesktopApp() {
               </div>
             </div>
           ) : null}
-          <div
-            className="transcript"
-            style={{ display: tab === "agents" ? "none" : undefined }}
-          >
+          <div className="transcript">
             {nextCursor ? (
               <button
                 className="text-button load-earlier"
@@ -1802,7 +1800,6 @@ function DesktopApp() {
                 items={items}
                 sessionId={session}
                 workspace={workspace}
-                working={working}
                 autoCollapse={preferences.autoCollapse}
                 media={media[session] || EMPTY_MEDIA}
               />
@@ -1813,6 +1810,14 @@ function DesktopApp() {
                 workspace={workspace}
               />
             ) : null}
+            {tab === "conversation" && (
+              <InlineAgents
+                items={items}
+                sessionId={session}
+                onError={setError}
+                onRefresh={() => void refreshSessions()}
+              />
+            )}
             {tab === "activity" && tasks.length === 0 ? (
               <div className="activity-empty">
                 <Terminal size={24} />
@@ -2244,113 +2249,17 @@ function DesktopApp() {
               setPreferences((prev) => ({ ...prev, rightWidth }))
             }
           />
-          <aside className="inspector">
-            <div className="inspector-heading">
-              WORKSPACE DETAILS{" "}
-              <button
-                className="icon-button"
-                title="Hide details"
-                onClick={() => setInspector(false)}
-              >
-                <X size={13} />
-              </button>
-            </div>
-            <div className="workspace-preview">
-              <div className="folder-art">
-                <Folder size={35} />
-              </div>
-              <b>{workspace ? basename(workspace) : "Your next project"}</b>
-              <small title={workspace}>
-                {workspace || "Open a folder to get started"}
-              </small>
-              {active?.branch ? (
-                <span className="branch-chip">
-                  <GitBranch size={12} /> {active.branch}
-                </span>
-              ) : null}
-            </div>
-            <div className="inspector-section">
-              <h3>
-                <ShieldCheck size={14} /> Approval rules
-              </h3>
-              <Select
-                label="Approval mode"
-                disabled={
-                  busy || working || readOnly || permissionProfile === "yolo"
-                }
-                value={permissionProfile === "yolo" ? "allowAll" : approvalMode}
-                options={[
-                  ...modes.map((mode) => ({
-                    value: mode.id,
-                    label: mode.label,
-                  })),
-                  {
-                    value: "allowAll",
-                    label: "YOLO · Allow all",
-                    disabled: true,
-                  },
-                ]}
-                onChange={(value) =>
-                  void changePermissions(permissionProfile, value)
-                }
-              />
-              <p>
-                {permissionProfile === "yolo"
-                  ? "All approvals allowed. Sandbox disabled for this conversation."
-                  : "Apply permission changes when this conversation and its agents are idle."}
-              </p>
-            </div>
-            <div className="inspector-section">
-              <McpPanel
-                inventory={mcp}
-                onRefresh={() =>
-                  void run(async () => setMcp(await window.muse.mcpInventory()))
-                }
-                onOpenCli={() => nativeCommand("/mcp")}
-              />
-            </div>
-            <div className="inspector-section">
-              <h3>
-                <Command size={14} /> Project skills{" "}
-                <span>{skills.length}</span>
-              </h3>
-              {skills.length ? (
-                skills.slice(0, 5).map((skill) => (
-                  <button
-                    className="skill-row"
-                    key={skill.selector}
-                    title={skill.description}
-                    onClick={() => {
-                      setPrompt(`/${skill.selector} `);
-                      textareaRef.current?.focus();
-                    }}
-                  >
-                    /{skill.selector}
-                    <ArrowUpRight size={11} />
-                  </button>
-                ))
-              ) : (
-                <p>
-                  Skills, rules, hooks, and MCP configuration are loaded by Muse
-                  for each project session.
-                </p>
-              )}
-            </div>
-            <div className="engine-card">
-              <div>
-                <MuseMark />
-                <b>One engine. All yours.</b>
-              </div>
-              <p>
-                Your local Muse Code does the work. Your sign-in stays with the
-                CLI.
-              </p>
-              <span>
-                <i />{" "}
-                {signedIn ? "CLI account connected" : "Official Muse runtime"}
-              </span>
-            </div>
-          </aside>
+          <WorkspaceInspector
+            {...(inspectorCallbacks as any)}
+            workspace={workspace}
+            branch={active?.branch}
+            permissionProfile={permissionProfile}
+            approvalMode={approvalMode}
+            modes={modes}
+            disabled={busy || working || readOnly}
+            inventory={mcp}
+            skills={skills}
+          />
         </>
       ) : null}
       {error ? (

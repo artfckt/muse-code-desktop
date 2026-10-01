@@ -98,6 +98,13 @@ const fs = require("node:fs");
         durationMs: 642,
       },
       {
+        itemId: "update",
+        kind: "reasoning",
+        summary: [
+          "Reviewing the sidebar and composer at smaller window sizes.",
+        ],
+      },
+      {
         itemId: "old-answer",
         kind: "agentMessage",
         text: "## A calmer, more focused workspace\n\nThe desktop now gives your conversation more room, with the familiar Muse palette.\n\n- **Compact navigation** keeps projects and chats easy to scan.\n- **Activity steps** gather tool calls into a quiet, expandable summary.\n- **Clear loading states** make opening a long conversation feel predictable.\n\n```css\n.session-row {\n  min-height: 25px;\n  border-radius: 6px;\n}\n```\n\nThe session details stay pinned above the activity feed, so context stays close while you explore the work.",
@@ -139,7 +146,7 @@ const fs = require("node:fs");
     el.scrollTop = 0;
   });
   await page.screenshot({ path: "docs/conversation-preview.png" });
-  await page.getByRole("button", { name: /Activity 2/ }).click();
+  await page.getByRole("button", { name: /Activity 3/ }).click();
   await page.locator(".tool-card summary").first().click();
   await page.screenshot({ path: "docs/activity-preview.png" });
   await page.evaluate(() => {
@@ -183,14 +190,24 @@ const fs = require("node:fs");
         },
       });
   });
-  await page.getByRole("button", { name: /Agents 2/ }).click();
+  await page.getByRole("button", { name: "Conversation", exact: true }).click();
+  await page.getByRole("button", { name: /Show agents.*2 total/ }).click();
   await page
     .getByRole("button", { name: "Open Reviewer separately" })
     .waitFor();
+  await page.locator(".chat-scroll").evaluate((el) => {
+    el.scrollTop = el.scrollHeight;
+  });
   await page.screenshot({ path: "docs/agents-preview.png" });
   await page.getByRole("button", { name: /^Settings/ }).click();
   await page.screenshot({ path: "docs/appearance-preview.png" });
   await page.getByRole("combobox", { name: "Interface font" }).click();
+  await page
+    .getByRole("textbox", { name: "Search installed fonts" })
+    .fill("Cascadia");
+  await page
+    .getByRole("option", { name: "Cascadia Code", exact: true })
+    .click();
   await page.screenshot({ path: "docs/font-preview.png" });
   await page.keyboard.press("Escape");
   await page.getByRole("tab", { name: "Updates", exact: true }).click();

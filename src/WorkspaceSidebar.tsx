@@ -3,7 +3,6 @@ import {
   Check,
   ChevronDown,
   ChevronsLeft,
-  ChevronsRight,
   Folder,
   GripVertical,
   Loader2,
@@ -256,28 +255,35 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar(props: {
       aria-label="Projects and chats sidebar"
     >
       <div className="sidebar-brand-row">
-        <div className="brand">
-          <div className="brand-icon">
+        {props.collapsed ? (
+          <button
+            className="brand-icon rail-expand"
+            aria-label="Expand sidebar"
+            title="Expand sidebar"
+            onClick={props.onCollapse}
+          >
             <MuseMark />
-          </div>
-          {!props.collapsed && (
-            <b>
-              muse <span>desktop</span>
-            </b>
-          )}
-        </div>
-        <button
-          className="icon-button sidebar-collapse"
-          aria-label={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          title={props.collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          onClick={props.onCollapse}
-        >
-          {props.collapsed ? (
-            <ChevronsRight size={15} />
-          ) : (
-            <ChevronsLeft size={15} />
-          )}
-        </button>
+          </button>
+        ) : (
+          <>
+            <div className="brand">
+              <div className="brand-icon">
+                <MuseMark />
+              </div>
+              <b>
+                muse <span>desktop</span>
+              </b>
+            </div>
+            <button
+              className="icon-button sidebar-collapse"
+              aria-label="Collapse sidebar"
+              title="Collapse sidebar"
+              onClick={props.onCollapse}
+            >
+              <ChevronsLeft size={15} />
+            </button>
+          </>
+        )}
       </div>
       <button
         className="new-chat-button"
@@ -380,8 +386,14 @@ export const WorkspaceSidebar = memo(function WorkspaceSidebar(props: {
                   setFolded((prev) => ({ ...prev, [root]: false }));
                 }}
               >
-                <Folder size={17} />
-                <span>{rows.length || ""}</span>
+                <b className="rail-project-initial">
+                  {root ? (
+                    shortPath(root).slice(0, 2).toUpperCase()
+                  ) : (
+                    <MessageSquare size={16} />
+                  )}
+                </b>
+                <span>{rows.length > 99 ? "99+" : rows.length || ""}</span>
               </button>
             ) : (
               <>

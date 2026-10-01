@@ -83,7 +83,6 @@ for (const width of [900, 1100, 1440])
       "Conversation",
       "Activity",
       "Muse CLI Native",
-      "Agents 0",
       "Rename",
     ]) {
       const target = page.getByRole("button", { name, exact: true });

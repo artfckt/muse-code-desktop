@@ -9,7 +9,7 @@ test("new conversation supports no folder and a newly chosen project", async ({
   page,
 }) => {
   await expect(page.locator(".window-bar")).toContainText("BETA");
-  await expect(page.locator(".window-bar")).toContainText("0.7.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText("0.8.0-beta.1");
   await expect(
     page.getByRole("button", { name: /Open a project/ }),
   ).toHaveCount(0);
@@ -201,8 +201,9 @@ test("completed and unavailable agents do not expose separate-window links", asy
         },
       });
   });
-  await page.getByRole("button", { name: /Agents 2/ }).click();
+  await page.getByRole("button", { name: /Show agents.*2 total/ }).click();
   await expect(page.locator(".agent-card")).toHaveCount(2);
+  await page.locator(".agent-info summary").first().click();
   await expect(page.locator(".agent-metadata").first()).toContainText(
     "muse-spark-1.3",
   );

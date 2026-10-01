@@ -156,7 +156,10 @@ test("resume preserves chronological order and ignores other sessions", async ({
 }) => {
   await page.getByRole("button", { name: "New conversation ＋" }).click();
   await page.getByRole("button", { name: "Create conversation" }).click();
-  await page.locator(".session-row").filter({hasText:"New conversation"}).click();
+  await page
+    .locator(".session-row")
+    .filter({ hasText: "New conversation" })
+    .click();
   await expect(page.locator(".user-message")).toHaveText("Earlier question");
   await expect(page.locator(".assistant-message")).toContainText(
     "Earlier answer",

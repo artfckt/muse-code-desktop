@@ -169,7 +169,7 @@ test("modal traps focus, restores trigger, and Escape dismisses the font menu fi
   const dialog = page.getByRole("dialog", { name: "Settings", exact: true });
   const font = page.getByRole("combobox", { name: "Interface font" });
   await font.click();
-  await font.press("Escape");
+  await page.keyboard.press("Escape");
   await expect(dialog).toBeVisible();
   await expect(
     page.getByRole("listbox", { name: "Interface font" }),
@@ -375,7 +375,7 @@ test("agent view has loading, beta version, and latest-message navigation", asyn
   await expect(
     page.getByText("Agent message 119", { exact: true }),
   ).toBeVisible();
-  await expect(page.locator(".window-bar")).toContainText("0.7.0-beta.1");
+  await expect(page.locator(".window-bar")).toContainText("0.8.0-beta.1");
   await page.locator(".chat-scroll").evaluate((element) => {
     element.scrollTop = 0;
   });

@@ -128,7 +128,9 @@ function TranscriptContent({ item }: { item: MuseItem }) {
         ? "Workflow"
         : item.kind === "subagent"
           ? item.role || "Subagent"
-          : item.kind;
+          : item.kind === "reminderChild"
+            ? "Agent update"
+            : item.kind;
   return (
     <details
       className={`tool-card ${item.status === "failed" ? "failed" : ""}`}

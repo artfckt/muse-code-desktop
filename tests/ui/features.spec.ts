@@ -204,7 +204,7 @@ test("native agents have separate windows and follow-up controls", async ({
     subagentId: "agent-1",
     status: "inProgress",
   });
-  await page.getByRole("button", { name: /Agents 1/ }).click();
+  await page.getByRole("button", { name: /Show agents.*1 total/ }).click();
   await page
     .getByRole("button", { name: "Open Researcher separately" })
     .click();
@@ -247,6 +247,7 @@ test("custom colors, fonts, selection and sidebar size persist", async ({
   await page
     .getByRole("option", { name: "Cascadia Code", exact: true })
     .click();
+  await page.getByRole("button", { name: "Apply font", exact: true }).click();
   await expect(page.locator("body")).toHaveCSS("user-select", "none");
   await page.reload();
   await expect(

@@ -1,4 +1,5 @@
 import type { MuseItem } from "./protocol";
+import { conversationPreview } from "./conversation";
 
 export type CachedConversation = {
   id: string;
@@ -45,7 +46,7 @@ export async function cachedConversation(
 export async function cacheConversation(row: CachedConversation) {
   try {
     // The disk preview is bounded; native history remains authoritative and complete.
-    const preview = { ...row, items: row.items.slice(-200) };
+    const preview = { ...row, items: conversationPreview(row.items) };
     if (JSON.stringify(preview).length * 2 > 2 * 1024 * 1024) return;
     const db = await database();
     await new Promise<void>((resolve, reject) => {
